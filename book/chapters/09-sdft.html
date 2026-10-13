@@ -1,0 +1,148 @@
+<!-- {"id":"sdft","part":"Part III · Recipes for language models","n":8,"title":"Teach yourself: Self-Distillation Fine-Tuning","dek":"Use the model twice: once as a teacher that sees an expert demonstration, once as a student that does not. Learning from your own samples keeps you close to who you were.","sources":["sdft"]} -->
+<p class="lede">Chapter 7 left a tension. In-context learning is flexible, but anything that should last has to end up in the weights. Idan Shenfeld, Mehul Damani, Jonas Hübotter and Pulkit Agrawal turn the first into a teacher for the second <cite k="sdft"></cite>.</p>
+
+<fig k="sd-1"></fig>
+
+<h2><span class="sec">8.1</span>The problem: SFT is off-policy</h2>
+<p>When rewards exist, on-policy reinforcement learning is known to forget less. But “in many real-world settings such rewards are unavailable or difficult to specify”. What we usually have are expert demonstrations, and the standard way to learn from them is supervised fine-tuning (SFT), which “is inherently off-policy, and prior work has shown that sequential SFT can lead to poor generalization and severe catastrophic forgetting” <cite k="sdft"></cite>. Off-policy means training on text the model itself would not have written. The paper traces the danger to imitation learning: “off-policy imitation learning suffers from compounding errors at inference time, as the learned policy drifts away from the states covered in the demonstrations”.</p>
+<p>The question is: “how can we obtain the benefits of on-policy learning when only demonstrations are available?”</p>
+
+<h2><span class="sec">8.2</span>The idea: the same model in two roles</h2>
+<p>Large models are good in-context learners. Show one an expert demonstration and it does the task better, and it does so <em>in its own style</em>. SDFT uses this:</p>
+<ul>
+<li>the <strong>teacher</strong> is the model conditioned on the query \(x\) and a demonstration \(c\): \(\pi(\cdot\mid x, c)\);</li>
+<li>the <strong>student</strong> is the same model given only the query: \(\pi_\theta(\cdot\mid x)\).</li>
+</ul>
+
+<fig k="sd-2"></fig>
+
+<p>The teacher prompt is deliberately plain:</p>
+<pre>&lt;Question&gt;
+This is an example for a response to the question:
+&lt;Demonstration&gt;
+Now answer with a response of your own, including the thinking process:</pre>
+<p>The authors find this “is sufficient to prevent the policy from outputting \(c\) verbatim and instead elicits a response that reflects the model’s understanding of the intent behind the demonstration” <cite k="sdft"></cite>.</p>
+
+<h2><span class="sec">8.3</span>The objective</h2>
+<p>For each prompt, SDFT samples a response from the <em>student</em> and minimises the reverse KL divergence to the teacher (Eq. 1):</p>
+\[ \mathcal{L}(\theta) \;=\; D_{\mathrm{KL}}\big(\pi_\theta(\cdot\mid x)\,\big\|\,\pi(\cdot\mid x, c)\big) \;=\; \mathbb{E}_{y\sim\pi_\theta(\cdot\mid x)}\!\left[\log\frac{\pi_\theta(y\mid x)}{\pi(y\mid x, c)}\right]. \]
+<p>Because the expectation is over the student’s own samples, the update is on-policy. Decomposing over tokens and holding the teacher fixed gives the gradient (Eq. 2):</p>
+\[ \nabla_\theta\mathcal{L}(\theta) \;=\; \mathbb{E}_{y\sim\pi_\theta}\!\left[\sum_t \sum_{y_t\in\mathcal{V}} \pi_\theta(y_t\mid y_{<t}, x)\,\log\frac{\pi_\theta(y_t\mid y_{<t}, x)}{\pi(y_t\mid y_{<t}, x, c)}\;\nabla_\theta\log\pi_\theta(y_t\mid y_{<t}, x)\right], \]
+<p class="eq-note">\(\mathcal{V}\) is the vocabulary. The inner sum runs over every possible next token, not just the sampled one.</p>
+
+<h3>Why this is secretly reinforcement learning</h3>
+<p>The paper shows SDFT maximises an implicit reward. Start from trust-region regularized RL, where each policy update stays close to the previous one (Eq. 3):</p>
+\[ \pi_{k+1} \;=\; \max_\pi\; \mathbb{E}_{y\sim\pi}\big[r(y, x)\big] \;-\; \beta\, D_{\mathrm{KL}}\big(\pi(\cdot\mid x)\,\|\,\pi_k(\cdot\mid x)\big). \]
+<p>Its optimum has a known closed form, a tilted distribution:</p>
+\[ \pi^*_{k+1}(y\mid x) \;\propto\; \pi_k(y\mid x)\,\exp\!\Big(\tfrac{1}{\beta}\,r(y,x)\Big) \quad\Longrightarrow\quad r(y,x) \;=\; \beta\big[\log\pi^*_{k+1}(y\mid x) - \log\pi_k(y\mid x)\big] + C . \]
+<p>The unknown optimal policy is then replaced by the demonstration-conditioned model. This is the <strong>In-Context Assumption</strong> (Eq. 4):</p>
+\[ \pi^*_{k+1}(y\mid x) \;\approx\; \pi(y\mid x, c), \]
+<p>which, after dropping \(\beta\) and \(C\) (they do not change the optimal policy), gives an intrinsic reward (Eq. 5):</p>
+\[ r(y, x, c) \;=\; \log\pi(y\mid x, c) \;-\; \log\pi_k(y\mid x), \qquad r_t(y_t\mid y_{<t}, x, c) \;=\; \log\frac{\pi(y_t\mid y_{<t}, x, c)}{\pi_k(y_t\mid y_{<t}, x)}. \]
+<p>Plugging this reward into the policy gradient (Eq. 6),</p>
+\[ \nabla_\theta J(\pi_k) \;=\; \mathbb{E}_{y\sim\pi_k}\!\left[\log\frac{\pi(y\mid x, c)}{\pi_k(y\mid x)}\;\nabla_\theta\log\pi_k(y\mid x)\right], \]
+<p>“is equivalent in expectation to the gradient of the reverse KL divergence” in Eq. 1. “Thus, our method can be viewed as an on-policy RL algorithm that maximizes rewards inferred by comparing the student’s current behavior to its own ‘wiser,’ demonstration-aware counterpart” <cite k="sdft"></cite>.</p>
+
+<h3>Does the assumption hold?</h3>
+<p>The teacher must be (1) good, achieving near-optimal reward, and (2) close to the current model. Both were checked on ToolAlpaca with Qwen2.5-7B-Instruct. Without demonstrations the base model solves <strong>42%</strong> of examples; with the right demonstration in context the teacher solves <strong>100%</strong>, with valid reasoning in 50 hand-checked traces. On closeness, KL from the base model is <strong>1.26 nats</strong> for an SFT-trained model and <strong>0.68 nats</strong> for the teacher, “nearly half the divergence” <cite k="sdft"></cite>.</p>
+
+<div class="recipe">
+  <div class="recipe-head"><h3>Self-Distillation Fine-Tuning</h3><span>Recipe 8.1 · Shenfeld et al. 2026</span></div>
+  <div class="recipe-body">
+    <div>
+      <h4>You will need</h4>
+      <ul>
+        <li>A base model with good in-context learning, about 7B parameters or more (see 8.6)</li>
+        <li>A dataset of (query, expert demonstration) pairs, with no reward function needed</li>
+        <li>An exponential moving average (EMA) copy of the student to act as the teacher</li>
+        <li>One sampled rollout per prompt per step</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Method</h4>
+      <ol>
+        <li>For a query \(x\), sample a response \(y\sim\pi_\theta(\cdot\mid x)\) from the student.</li>
+        <li>Score every token of \(y\) under the teacher: the EMA model given \(x\) and the demonstration \(c\) through the prompt above.</li>
+        <li>Compute the per-token KL between student and teacher over the full vocabulary (the analytic estimator in 8.4).</li>
+        <li>Update the student. The paper notes that in practice a forward-KL logit loss gave the best results, though the theory points to reverse KL.</li>
+        <li>Mask the loss on the first few tokens to suppress teacher artifacts such as “Based on the example…”.</li>
+      </ol>
+    </div>
+  </div>
+  <div class="recipe-foot"><b>Cost</b>About 2.5× the FLOPs and 4× the wall-clock time of SFT. Methods that repair forgetting after SFT also add extra stages, so the overall comparison is closer <cite k="sdft"></cite>.</div>
+</div>
+
+<h2><span class="sec">8.4</span>Kitchen details: estimating the KL gradient</h2>
+<p>Three estimators were compared in the appendix <cite k="sdft"></cite>:</p>
+<p><strong>Token-level (partial)</strong>, differentiating each sampled token independently. This is biased because it ignores how early tokens shape later ones:</p>
+\[ \hat g_\text{token} = \sum_{t=1}^{T}\log\frac{\pi_\theta(y_t\mid y_{<t}, x)}{\pi(y_t\mid y_{<t}, x, c)}\,\nabla_\theta\log\pi_\theta(y_t\mid y_{<t}, x). \]
+<p><strong>Full analytic per-token</strong>, summing over the vocabulary at each step. This has lower variance but is still biased at the sequence level:</p>
+\[ \hat g_\text{analytic} = \sum_{t=1}^{T}\sum_{v\in\mathcal{V}}\log\frac{\pi_\theta(v\mid y_{<t}, x)}{\pi(v\mid y_{<t}, x, c)}\,\nabla_\theta\log\pi_\theta(v\mid y_{<t}, x). \]
+<p><strong>Rao–Blackwellized</strong>, which is unbiased with provably lower variance, but more expensive:</p>
+\[ \hat g_\text{rb} = \sum_{t=1}^{T}\Big[\sum_{v\in\mathcal{V}}\log\frac{\pi_\theta(v\mid y_{<t}, x)}{\pi(v\mid y_{<t}, x, c)}\,\nabla_\theta\log\pi_\theta(v\mid y_{<t}, x) \;+\; k_\theta(y_{<t})\sum_{i=1}^{t-1}\nabla_\theta\log\pi_\theta(y_i\mid y_{<i}, x)\Big], \]
+<p class="eq-note">\(k_\theta(y_{<t})\) is the step-wise KL between student and teacher next-token distributions.</p>
+<p>Despite its bias, the analytic estimator “consistently yields the most stable optimization and best downstream performance”, and multiple samples per prompt helped little. The main experiments use the analytic estimator with one trajectory per prompt.</p>
+<p>The choice of teacher matters too. A frozen base model is stable but does not improve as the student learns. Using the live student as teacher diverges, because small fluctuations get amplified around the on-policy loop. An EMA of the student is the compromise that works <cite k="sdft"></cite>.</p>
+<fig k="sd-8"></fig>
+
+<h2><span class="sec">8.5</span>Results</h2>
+<p>Two settings were tested, both on Qwen2.5-7B-Instruct unless noted <cite k="sdft"></cite>:</p>
+<ul>
+<li><strong>Skill learning</strong>, on three domains the model had not been specifically tuned for: Science Q&amp;A (Chemistry L-3 from SciKnowEval), Tool Use (ToolAlpaca) and Medical (HuatuoGPT-o1 clinical reasoning).</li>
+<li><strong>Knowledge acquisition</strong>, from about 200K tokens of Wikipedia articles on 2025 natural disasters, after the model’s cutoff, turned into question–answer pairs.</li>
+</ul>
+<p>“Previous capabilities” is the average over HellaSwag, TruthfulQA, MMLU, IFEval, Winogrande and HumanEval.</p>
+
+<h3>New skill without losing old ones</h3>
+<fig k="sd-4"></fig>
+<p>“Our method is the only approach to improve performance on the new task without significant degradation in prior capabilities.” SFT forgets. SFT followed by “re-invocation” recovers some ground but not all. DFT, which approximates on-policy updates with importance sampling, sits in between <cite k="sdft"></cite>.</p>
+
+<h3>New knowledge</h3>
+<div class="tbl"><div class="tbl-scroll"><table>
+<thead><tr><th>Method</th><th>Accuracy (strict)</th><th>Accuracy (lenient)</th><th>OOD accuracy</th></tr></thead>
+<tbody>
+<tr><th>Base</th><td>0</td><td>0</td><td>0</td></tr>
+<tr><th>Oracle RAG</th><td>91</td><td>100</td><td>100</td></tr>
+<tr><th>CPT (continual pre-training)</th><td>9</td><td>37</td><td>7</td></tr>
+<tr><th>SFT</th><td>80</td><td>95</td><td>80</td></tr>
+<tr><th>SDFT</th><td class="best">89</td><td class="best">100</td><td class="best">98</td></tr>
+</tbody></table></div>
+<p class="tbl-cap"><b>Table 8.1</b> Knowledge acquisition. Table 1 of Shenfeld et al. 2026. Strict means every detail is correct. Lenient means correct with no false statements. OOD questions depend on the new facts without naming them, for example “Which countries required international humanitarian aid in 2025?”.</p></div>
+<p>The OOD column is the telling one. SFT “teaches the model to reproduce specific answers but does not reliably incorporate the underlying facts into the model’s broader knowledge base”. An ablation showed the teacher needs both the article and the answer: 89% strict accuracy, against 75% with the text alone <cite k="sdft"></cite>.</p>
+
+<h3>Three skills in a row</h3>
+<fig k="sd-3"></fig>
+<p>Trained on Tool Use, then Science, then Medical: “SDFT enables stable accumulation of skills over time”, while SFT shows “severe interference—performance on earlier skills rapidly degrades once training shifts to a new task, resulting in oscillatory behavior rather than cumulative learning” <cite k="sdft"></cite>.</p>
+
+<h2><span class="sec">8.6</span>Bigger models make better teachers</h2>
+<fig k="sd-5"></fig>
+<p>At 3B, the teacher is too weak and SDFT trails SFT. At 7B it leads by four points, and at 14B by seven. Pass@\(k\) rises at every \(k\) up to 128, which shows “genuine skill acquisition rather than entropy collapse” <cite k="sdft"></cite>.</p>
+
+<h3>Is the teacher alone enough?</h3>
+<fig k="sd-6"></fig>
+<p>No. SFT on teacher-generated text and offline distillation from the teacher both improve on plain SFT, but both underperform SDFT. “The benefits of SDFT cannot be attributed solely to the quality of the teacher”: being on-policy is essential <cite k="sdft"></cite>.</p>
+
+<h3>Training a reasoning model without reasoning data</h3>
+<div class="tbl"><div class="tbl-scroll"><table>
+<thead><tr><th>Model</th><th>Accuracy</th><th>Avg. number of tokens</th></tr></thead>
+<tbody>
+<tr><th>Olmo-3-7B-Think</th><td>31.2</td><td>4612</td></tr>
+<tr><th>+ SFT</th><td class="worst">23.5</td><td class="worst">3273</td></tr>
+<tr><th>+ SDFT</th><td class="best">43.7</td><td>4180</td></tr>
+</tbody></table></div>
+<p class="tbl-cap"><b>Table 8.2</b> Fine-tuning a reasoning model on a medical dataset that contains only final answers. Table 2 of Shenfeld et al. 2026. SFT teaches the model to cut its reasoning short. SDFT keeps the reasoning depth and improves accuracy.</p></div>
+
+<div class="caveat"><b>Chef’s notes from the paper</b>
+<ul>
+<li><strong>Learned artifacts.</strong> The student can pick up the teacher’s phrases, such as “Based on the text…”. Masking the first tokens works, but it is “fundamentally a heuristic fix”.</li>
+<li><strong>Capability floor.</strong> The method relies on in-context learning, and small models fail.</li>
+<li><strong>Limited behaviour change.</strong> SDFT “struggles when the desired behavior requires a fundamental shift in the model’s generation patterns”. Turning a non-reasoning model into a chain-of-thought model “proved difficult”.</li>
+<li><strong>Some forgetting remains.</strong> On-policy learning reduces it, but “some degradation of prior capabilities remains”.</li>
+</ul>
+SDFT is “not an alternative to on-policy RL, but addresses a complementary learning regime”. It could serve as an initialization for RL afterwards <cite k="sdft"></cite>.</div>
+
+<div class="takeaways"><h4>What to take from this chapter</h4><ol>
+<li>Off-policy imitation (SFT) drags the model away from itself, and that drift is what erases old skills.</li>
+<li>Conditioning the same model on a demonstration gives a teacher that is both right and close. Distilling on the student’s own samples is on-policy learning without a reward.</li>
+<li>The KL objective is an RL objective in disguise, with reward \(\log\pi(y\mid x,c) - \log\pi_k(y\mid x)\).</li>
+</ol></div>

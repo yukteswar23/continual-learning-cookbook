@@ -1,0 +1,110 @@
+<!-- {"id":"fast-slow","part":"Part III · Recipes for language models","n":9,"title":"Learning, fast and slow","dek":"Why force every lesson into the weights? Let an evolving prompt soak up the task-specific details, and the parameters will move less, forget less, and stay able to learn the next thing.","sources":["fst"]} -->
+<p class="lede">Rishabh Tiwari, Kusha Sareen, Lakshya Agrawal and colleagues start from a sentence worth remembering: “There is no good reason for restricting learning to being in-context or in-weights” <cite k="fst"></cite>. Chapter 7 showed the two channels behave differently. This chapter uses both at once.</p>
+
+<fig k="fst-1"></fig>
+
+<h2><span class="sec">9.1</span>The bottleneck of parameter-only learning</h2>
+<p>When RL is the only way a model adapts, “every improvement, whether it be a reusable reasoning skill, a task-specific heuristic or a transient lesson from recent rollouts, must be written into the same persistent set of model weights.” Every such update moves the model away from its base behaviour. That reduces entropy, hurts out-of-distribution generalization, and degrades “its ability to adapt to future tasks, known as plasticity loss” <cite k="fst"></cite>.</p>
+<p>Prompts are a second channel. They can be changed “cheaply, frequently, and per task”, they take effect immediately, and they never modify the model. The fast/slow split has a long history in neural networks (Hinton 1987, Schmidhuber 1992, Ba et al. 2016). It separates temporary, task-specific adaptation in fast weights from persistent, broadly useful behaviour in slow weights <cite k="fst"></cite>.</p>
+
+<h2><span class="sec">9.2</span>The formal recipe</h2>
+<p>The slow weights are the model parameters \(\theta\). The fast weights are a textual scaffold \(\phi\) from the space of strings \(\Sigma^*\). A response is sampled as \(y\sim\pi_\theta(\cdot\mid x,\phi)\), and both are optimised for reward (Eq. 2):</p>
+\[ \max_{\theta,\,\phi}\; J(\theta,\phi) \;=\; \mathbb{E}_{x\sim\mathcal{D},\; y\sim\pi_\theta(\cdot\mid x,\phi)}\big[r(x,y)\big]. \]
+
+<h3>The slow loop: RL with verifiable rewards</h3>
+<p>For each query, generate a group of \(G\) rollouts and compute group-relative advantages (Eq. 3):</p>
+\[ A_i \;=\; \frac{r(x,y_i) - \bar r_g}{\sigma_g + \varepsilon},\qquad \bar r_g = \frac1G\sum_{j=1}^{G} r(x,y_j),\qquad \sigma_g^2 = \frac1G\sum_{j=1}^{G}\big(r(x,y_j)-\bar r_g\big)^2 . \]
+<p>Update with CISPO, a truncated importance-sampling REINFORCE objective (Eq. 4):</p>
+\[ \mathcal{L}_\textsf{CISPO}(\theta) \;=\; -\,\mathbb{E}\Big[\,\mathrm{sg}\big(\min(\rho_t,\tau)\big)\cdot A\cdot\nabla_\theta\log\pi_\theta(y_t\mid x,\phi,y_{<t})\Big], \qquad \rho_t = \frac{\pi_\theta(y_t\mid x,\phi,y_{<t})}{\pi_{\theta_\text{old}}(y_t\mid x,\phi,y_{<t})}, \]
+<p class="eq-note">\(\tau\) is a truncation threshold and \(\mathrm{sg}\) stops the gradient. The reward \(r\in[0,1]\) comes from an automatic verifier.</p>
+
+<h3>The fast loop: reflective prompt evolution</h3>
+<p>A prompt’s fitness on an instance is its expected reward (Eq. 5):</p>
+\[ s(\phi; x) \;=\; \mathbb{E}_{y\sim\pi_\theta(\cdot\mid x,\phi)}\big[r(x,y)\big]. \]
+<p><strong>GEPA</strong> keeps a population of prompts. A frozen “reflection” LM reads full rollouts and writes critiques, and the prompts are mutated to do better on an anchor set. Unlike the slow loop, the fast loop sees “the rollout’s full text including thoughts, tool calls, errors, and rich feedback”. GEPA returns a Pareto frontier of complementary prompts, not a single winner <cite k="fst"></cite>.</p>
+
+<h3>Putting them together</h3>
+<p>FST keeps a population of \(K\) prompts \(\Phi = \{\phi^{(1)},\dots,\phi^{(K)}\}\) and samples one uniformly per rollout (Eq. 6):</p>
+\[ \max_{\theta,\,\Phi}\; J(\theta,\Phi) \;=\; \mathbb{E}_{x\sim\mathcal{D},\;\phi\sim U(\Phi),\;y\sim\pi_\theta(\cdot\mid x,\phi)}\big[r(x,y)\big]. \]
+
+<fig k="fst-2"></fig>
+
+<div class="recipe">
+  <div class="recipe-head"><h3>Fast-Slow Training (FST)</h3><span>Recipe 9.1 · Tiwari et al. 2026</span></div>
+  <div class="recipe-body">
+    <div>
+      <h4>You will need</h4>
+      <ul>
+        <li>A policy model (Qwen3-8B in the paper) and a task with a verifier</li>
+        <li>A frozen reflection LM for GEPA</li>
+        <li>Tasks whose feedback is informative text, such as errors and failed checks, which is where the fast loop shines</li>
+        <li>Cycle length \(T = 6\) RL steps and \(K\in\{4, 8\}\) prompts</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Method</h4>
+      <ol>
+        <li>At the start of cycle \(c\), pre-fetch the next \(T\) RL batches as a lookahead set \(\mathcal{L}_c\).</li>
+        <li>Run GEPA with the current policy \(\pi_{\theta_c}\), seeded with the previous prompts \(\Phi_c\) and anchored on \(\mathcal{L}_c\). Keep the top \(K\) prompts of the Pareto frontier as \(\Phi_{c+1}\).</li>
+        <li>For each problem, form a rollout group of size \(G\): sample each prompt \(G/K\) times, so every group mixes prompt variation with sampling variation.</li>
+        <li>Normalize rewards within the whole group, compute advantages, and apply the CISPO update. Repeat for \(T\) steps with the prompts held fixed.</li>
+        <li>Start the next cycle: new GEPA phase under the updated policy.</li>
+      </ol>
+    </div>
+  </div>
+  <div class="recipe-foot"><b>Key point</b>“Rather than first training a policy and then optimizing a prompt for the final checkpoint, our method allows the context and the policy to co-evolve” <cite k="fst"></cite>.</div>
+</div>
+
+<h2><span class="sec">9.3</span>Advantage 1: data efficiency</h2>
+<fig k="fst-3"></fig>
+<p>FST reached RL’s running peak in <strong>3.0×</strong> fewer steps on CodeIO, <strong>1.4×</strong> on Math (Polaris) and <strong>3.0×</strong> on HoVer-hard, then kept climbing past it. Out of distribution, with no GEPA prompt at test time, nothing was lost: FST scored 49.7% against RL’s 51.1% on CodeIO-trained OOD, 36.5% against 36.2% for Math, and 48.5% against 48.4% for HoVer. All are well above the base model’s 41.0%, 26.9% and 47.5% <cite k="fst"></cite>.</p>
+
+<h2><span class="sec">9.4</span>Advantage 2: a higher ceiling</h2>
+<p>Fitting a four-parameter sigmoid to each validation curve,</p>
+\[ \Delta R \;=\; \frac{A - R_0}{1 + \big(C_\text{mid}/C\big)^{B}}, \]
+<p class="eq-note">where \(A\) is the upper asymptote, \(B\) a scaling exponent, \(C_\text{mid}\) the midpoint and \(R_0\) the reward at step 0.</p>
+<div class="tbl"><div class="tbl-scroll"><table>
+<thead><tr><th>Task</th><th>FST asymptote \(A\)</th><th>RL asymptote \(A\)</th><th>Difference</th></tr></thead>
+<tbody>
+<tr><th>CodeIO</th><td class="best">47.4%</td><td>43.0%</td><td>+4.4 pp</td></tr>
+<tr><th>Math (Polaris)</th><td class="best">49.2%</td><td>46.4%</td><td>+2.9 pp</td></tr>
+<tr><th>HoVer-hard</th><td class="best">25.0%</td><td>17.3%</td><td>+7.7 pp</td></tr>
+</tbody></table></div>
+<p class="tbl-cap"><b>Table 9.1</b> Fitted performance asymptotes. Transcribed from Section 4 (Advantage 2) of Tiwari et al. 2026.</p></div>
+
+<h2><span class="sec">9.5</span>Advantage 3: staying close to home</h2>
+<fig k="fst-5"></fig>
+<p>“At matched reward, FST sits to the left of RL on every task, reaching the same reward at a significantly lower KL from the base policy”, up to 70% lower. The paper connects this to earlier work showing that the size of the KL shift on a new task “correlates with how much prior knowledge is forgotten” <cite k="fst"></cite>.</p>
+
+<h2><span class="sec">9.6</span>Advantage 4: plasticity</h2>
+<p>Forgetting is losing the past. <strong>Plasticity loss</strong> is losing the future: “the slow weights become specialized to the trained task and lose responsiveness to gradient signals from new ones.” The probe is simple. Train on task X with RL or FST, then run plain RL on a new task Y from each checkpoint <cite k="fst"></cite>.</p>
+<fig k="fst-6"></fig>
+<p>After Math training, the RL checkpoint “collapses HoVer-hard learnability to near-zero”. Its curve “drops to ~0% within 40 steps and stays flat”, while the FST checkpoint learns about as well as a fresh base model. After Physics, FST-init reaches 24.2% at step 400 and is still climbing, against 19.9% for RL-init. In the summary figure (Fig. 9.1, middle) the final accuracies are 19.3% from the base model, 10.0% from the RL checkpoint and 20.5% from the FST checkpoint <cite k="fst"></cite>.</p>
+
+<h2><span class="sec">9.7</span>Advantage 5: continual learning on the fly</h2>
+<fig k="fst-7"></fig>
+<p>One uninterrupted run switches task every 200 steps: HoVer, then CodeIO, then Physics. On the middle stage, “RL barely lifts off its starting accuracy, peaking at 20.7% mean@16 (a +2.5pp gain over its 18.3% stage-start), while FST climbs to near-peak in just ~80 steps (less than half the budget) and finishes the stage at 37.7%, a +19.6pp gain”. That is about an 8× faster acquisition rate within the stage, and a 17.0-point lead at step 400 <cite k="fst"></cite>.</p>
+
+<h2><span class="sec">9.8</span>Why it works</h2>
+<p><strong>The fast weights move first.</strong> On a synthetic star-graph path-finding task where the base model scores almost zero, RL stays at zero reward for roughly the first 300 steps. FST gets measurable reward by about step 50, “driven almost entirely by the first few GEPA cycles”, using the task’s textual feedback about where a path went wrong <cite k="fst"></cite>.</p>
+<p><strong>Both channels carry part of the gain.</strong></p>
+<fig k="fst-9"></fig>
+<div class="tbl"><div class="tbl-scroll"><table>
+<thead><tr><th>Task (pass@1)</th><th>Base weights + original prompt</th><th>FST weights only</th><th>FST prompt only</th><th>FST weights + FST prompt</th></tr></thead>
+<tbody>
+<tr><th>HoVer-hard</th><td>2.0</td><td>11.6</td><td>10.6</td><td class="best">21.2</td></tr>
+<tr><th>CodeIO</th><td>–</td><td>25.1</td><td>34.5</td><td class="best">43.3</td></tr>
+<tr><th>Math (Polaris)</th><td>20.0</td><td colspan="3" class="l">almost all gain in the slow weights: 20.0 → 47.2</td></tr>
+</tbody></table></div>
+<p class="tbl-cap"><b>Table 9.2</b> Decomposing the in-distribution gain. Transcribed from Section 5 (Observation 2) of Tiwari et al. 2026. “–” means the value is not stated in the text. The Polaris base was custom SFT-trained and follows instructions less well.</p></div>
+<p>A naive alternative, distilling the prompts’ effect into the weights instead of training both against reward, “plateaus well below FST” <cite k="fst"></cite>.</p>
+
+<blockquote><p>“The distinction between context and weight optimization represents a broader split between declarative and procedural knowledge, an important distinction for any general-purpose reasoner.”</p><footer>Tiwari et al. 2026, Discussion</footer></blockquote>
+
+<div class="caveat"><b>The authors’ own limits</b>The study covers one instantiation, CISPO for weights and GEPA for prompts. Other optimizers are untested, compute and rollout reuse could be more efficient, and distillation-based variants remain largely open. The paper also notes that the fast channel’s advantage comes partly from learning from text feedback, “overcoming the widely accepted 1-bit-per-episode information limit of binary RLVR” <cite k="fst"></cite>.</div>
+
+<div class="takeaways"><h4>What to take from this chapter</h4><ol>
+<li>Treat the prompt as a set of weights too: fast, cheap and disposable. Let it absorb task-specific lessons from rich text feedback.</li>
+<li>When the prompt carries part of the adaptation, the parameters drift less (up to 70% lower KL). Less drift means less forgetting and more plasticity.</li>
+<li>Plasticity loss can be severe: an RL-trained checkpoint could barely learn the next task at all.</li>
+</ol></div>

@@ -1,0 +1,94 @@
+<!-- {"id":"clbench","part":"Part IV · Tasting","n":11,"title":"Did it actually learn? Continual Learning Bench","dek":"A strong model can score well without learning anything along the way. To taste continual learning you have to subtract what the system already knew.","sources":["clbench","episode"]} -->
+<p class="lede">The episode calls for method-agnostic benchmarking at 01:10:45 <cite k="episode"></cite>. In June 2026, Parth Asawa, Matei Zaharia, Joseph Gonzalez and colleagues released one. The abstract says: “Continual learning, the ability of AI systems to improve through sequential experience, has attracted substantial interest, but no high-quality benchmark exists to evaluate it” <cite k="clbench"></cite>.</p>
+
+<h2><span class="sec">11.1</span>Why existing tests miss the point</h2>
+<p>Existing evaluations each test a proxy. Memory systems are scored on recall over past conversations. Context-compaction methods are scored on preserving full-context behaviour. Test-time-training methods are scored on loss, knowledge insertion or new-task accuracy. “These proxies do not directly test whether a system improves online by learning environment-specific latent structure across related tasks” <cite k="clbench"></cite>.</p>
+
+<fig k="clb-1"></fig>
+
+<h2><span class="sec">11.2</span>Vocabulary</h2>
+<ul>
+<li>A <strong>task</strong> is a sequence of problem instances.</li>
+<li>An <strong>instance</strong> is one problem, such as one database question. Reward is defined per instance.</li>
+<li>A <strong>step</strong> is one agent action, such as one SQL query.</li>
+<li>A <strong>system</strong> is anything under test: a model plus any learning mechanism. “CL-Bench does not prescribe a specific adaptation mechanism.”</li>
+<li><strong>Variants</strong> change the environment to introduce concept drift. A <strong>schedule</strong> is the full ordered run across variants <cite k="clbench"></cite>.</li>
+</ul>
+
+<h2><span class="sec">11.3</span>What makes a good continual learning task</h2>
+<p>Three admission criteria “jointly define when measured improvement reflects online learning rather than static model capability” <cite k="clbench"></cite>:</p>
+<ol>
+<li><strong>Headroom.</strong> Initial performance must be well below the maximum, and the structure to be learned must not be recoverable from general training. Otherwise “a stronger base model and a learning system are indistinguishable”.</li>
+<li><strong>Shared latent structure.</strong> Something discoverable, “such as codebase structure, schema conventions, opponent strategies”, must be shared across instances and never stated explicitly.</li>
+<li><strong>Learning mechanism.</strong> Earlier instances must produce feedback that is informative for later ones: test failures, error messages, intermediate predictions.</li>
+</ol>
+<div class="note"><b>Running example: Database Exploration</b>An agent answers 40 questions about an unfamiliar SQLite database of Amazon product reviews, with a budget of 15 exploratory queries per question. The schema is deliberately obfuscated: table <code>g2_reviews</code>, a column <code>vrf</code> for verified status, and prices stored as integer cents for Electronics but float dollars for other groups. Reward is the fraction of the query budget saved. Halfway through, a migration renames tables and reformats columns, so the agent must notice which knowledge has gone stale <cite k="clbench"></cite>.</div>
+<p>These criteria rule out a common shortcut: you cannot build such a benchmark by chaining instances from existing benchmarks, because those instances “are designed to be diverse and independent”. Each task was designed from scratch and reviewed by two authors. Two or three domain experts per task then judged realism, reusable knowledge and learnability, spending on average 2.14 hours per review cycle <cite k="clbench"></cite>.</p>
+
+<fig k="clb-3"></fig>
+<p>The six domains are software engineering (Codebase Adaptation), database analytics (Database Exploration), epidemiological forecasting (Cohort Studies), RF spectrum monitoring (Blind Spectrum Monitoring), sales forecasting (Sales Prediction) and strategic gaming (Exploitable Poker). Codebase Adaptation and Sales Prediction run agents in a persistent terminal with full shell access <cite k="clbench"></cite>.</p>
+
+<h2><span class="sec">11.4</span>The metrics</h2>
+<p>A system processes instances \(x_1,\dots,x_N\) and receives rewards \(r_t\). A <strong>stateless</strong> system uses only the current instance, \(\pi_t = \pi(x_t)\). A <strong>stateful</strong> one also uses the history \(\mathcal{H}_{t-1} = \{(x_i, r_i)\}_{i=1}^{t-1}\), so \(\pi_t = \pi(x_t, \mathcal{H}_{t-1})\). The task reward is the stateful system’s total:</p>
+\[ r^{sf} \;=\; \sum_{t=1}^{N} r^{sf}_t . \]
+<p>A rising curve is not enough, because difficulty varies between instances and between systems: “A generically strong system may produce high reward with no learning at all while a weaker system that exploits prior experience may show lower absolute reward but actually improves over time.” Hence <strong>gain</strong>: run the <em>same</em> system statelessly on the same instances and subtract.</p>
+\[ g_t \;=\; r^{sf}_t - r^{sl}_t, \qquad g \;=\; \sum_{t=1}^{N} g_t . \]
+<p>“Whatever makes instance \(t\) intrinsically easy or hard for a given system appears equally in both terms. The difference isolates only the contribution of the accumulated state” <cite k="clbench"></cite>.</p>
+
+<fig k="clb-4"></fig>
+
+<p>Each task specifies a maximum average reward \(r_\text{max}\), which lets scores be compared across tasks. <strong>Normalized gain</strong> divides by the system’s own headroom:</p>
+\[ \widehat{g} \;=\; \frac{\bar r^{sf} - \bar r^{sl}}{r_\text{max} - \bar r^{sl}}, \]
+<p>and <strong>normalized reward</strong> uses a fixed external reference, the stateless reward of GPT-5.4 with ICL, so that a system’s score “does not change as new systems are added”:</p>
+\[ \widehat{r} \;=\; \frac{\bar r^{sf} - r_\text{external}}{r_\text{max} - r_\text{external}} . \]
+
+<h2><span class="sec">11.5</span>The results</h2>
+<p>The systems tested were full-context ICL; ICL Notepad (the agent maintains its own notes); Mem0 (automatic memory extraction with top-10 retrieval); ACE (a playbook of memories updated after each instance); and Claude Code and Codex run headless with automatic context compaction. Models were Claude Opus 4.7, Claude Sonnet 4.6, Gemini 3.1 Pro, Gemini 3 Flash and GPT-5.4, each averaged over 5 rollouts per task <cite k="clbench"></cite>.</p>
+
+<div class="tbl"><div class="tbl-scroll"><table>
+<thead><tr><th>Rank</th><th class="l">System</th><th class="l">Model</th><th>Norm. reward (%)</th><th>Norm. gain (%)</th><th>Cost ($)</th></tr></thead>
+<tbody>
+<tr><td>1</td><td class="l">ICL</td><td class="l">Claude Sonnet 4.6</td><td class="best">22.3 ± 4.1</td><td class="best">25.4 ± 3.6</td><td>30.4</td></tr>
+<tr><td>2</td><td class="l">ICL</td><td class="l">GPT-5.4</td><td>20.1 ± 9.1</td><td>20.1 ± 9.1</td><td>18.4</td></tr>
+<tr><td>3</td><td class="l">Claude Code</td><td class="l">Sonnet 4.6</td><td>19.0 ± 7.1</td><td>23.9 ± 5.7</td><td>38.6</td></tr>
+<tr><td>4</td><td class="l">Mem0</td><td class="l">GPT-5.4</td><td>15.1 ± 6.4</td><td>20.2 ± 5.9</td><td>18.3</td></tr>
+<tr><td>5</td><td class="l">ICL</td><td class="l">Claude Opus 4.7</td><td>10.2 ± 4.4</td><td>19.5 ± 4.1</td><td>49.6</td></tr>
+<tr><td>6</td><td class="l">ICL Notepad</td><td class="l">GPT-5.4</td><td>8.0 ± 3.3</td><td>7.8 ± 3.0</td><td>14.3</td></tr>
+<tr><td>7</td><td class="l">ICL</td><td class="l">Gemini 3 Flash</td><td>8.0 ± 4.7</td><td>16.4 ± 3.8</td><td class="best">7.6</td></tr>
+<tr><td>8</td><td class="l">Codex</td><td class="l">GPT-5.4</td><td>6.6</td><td>14.6</td><td>27.2</td></tr>
+<tr><td>9</td><td class="l">ACE</td><td class="l">GPT-5.4</td><td>4.6 ± 2.7</td><td>8.6 ± 2.5</td><td class="worst">62.8</td></tr>
+<tr><td>10</td><td class="l">ICL Notepad</td><td class="l">Claude Sonnet 4.6</td><td>3.5 ± 5.7</td><td>18.2 ± 3.4</td><td>31.5</td></tr>
+<tr><td>11</td><td class="l">ICL Notepad</td><td class="l">Gemini 3.1 Pro</td><td>−0.2 ± 3.4</td><td>9.4 ± 3.0</td><td>13.3</td></tr>
+<tr><td>12</td><td class="l">ICL</td><td class="l">Gemini 3.1 Pro</td><td class="worst">−5.6 ± 4.1</td><td>6.2 ± 3.8</td><td>15.2</td></tr>
+</tbody></table></div>
+<p class="tbl-cap"><b>Table 11.1</b> “ICL is a strong baseline continual learning system.” Table 1 of Asawa et al. 2026. Averages over the six tasks, with 95% CIs from per-task rollout variance (none for Codex). Cost is the mean total rollout cost across tasks in USD. The live leaderboard at continual-learning-bench.com may have changed since.</p></div>
+
+<p><strong>Simple wins.</strong> Full-context ICL with Sonnet 4.6 has both the highest reward and the highest gain. Dedicated memory systems “do poorly relative to their cost”: ACE ranks tenth by gain at the highest cost. The same Sonnet model with a Notepad drops to sixth by gain, which shows “the choice of learning medium matters as much as the underlying model” <cite k="clbench"></cite>.</p>
+
+<fig k="clb-5"></fig>
+<p>Learning looks different in each task. Sales Prediction and Blind Spectrum Monitoring show early, clear gaps. In Database Exploration the gain shows up mostly as the stateless system’s reward “collapses to zero” while the stateful one keeps a floor. In Cohort Studies, Codebase and Poker the two curves overlap. In Cohort Studies, “experts validated the learnability of the latent structure but no evaluated system currently extracts it, appearing misled by spurious correlations” <cite k="clbench"></cite>.</p>
+
+<fig k="clb-6"></fig>
+<p>On cost, “no dedicated memory system dominates ICL on either cost axis”. ICL with Gemini 3 Flash gives 16.4% gain at $7.6 per run. Claude Code is the one clear exception on the frontier, with 23.9% gain and the strongest single-task gains on Sales Prediction (65.1%) and Database Exploration (43.6%) <cite k="clbench"></cite>.</p>
+
+<h3>Stability and plasticity, measured</h3>
+<p>Variant boundaries give a natural split. Gain on the <em>first</em> instance of a new variant measures <strong>stability</strong>: transferring old knowledge before any feedback in the new variant. Gain <em>within</em> a variant measures <strong>plasticity</strong>: adapting to new information <cite k="clbench"></cite>.</p>
+<fig k="clb-7"></fig>
+<p>ICL Notepad with Sonnet 4.6 shows the most stable learning. ICL and Claude Code are the most plastic. ACE and GPT-5.4 with ICL show “virtually no stable learning”: their gains come from repeated exposure to the same variant, “offset by information loss after switches to new variants” <cite k="clbench"></cite>.</p>
+
+<h2><span class="sec">11.6</span>Try it yourself</h2>
+<p>The benchmark is open source (Apache-2.0). From the repository README <cite k="clbench"></cite>:</p>
+<pre>git clone https://github.com/pgasawa/continual-learning-bench
+uv sync --all-extras &amp;&amp; source .venv/bin/activate
+clbench run exploitable_poker --schedule quick_test --system icl</pre>
+<p>It needs Python 3.13+, uv and Docker. Tasks live in <code>src/tasks/</code> and systems in <code>src/systems/</code>. The harness runs multi-episode rollouts and records traces. The paper invites contributions: “We expect CL-Bench to be a continuously improving benchmark, leveraging the open-source community to add more varied and challenging tasks.”</p>
+
+<div class="caveat"><b>The authors’ own limits</b>Six domains do not cover all real-world continual learning. Sequences are tens of instances long, shorter than real deployments. Only context-based memory paradigms were evaluated: “we do not evaluate parametric approaches such as test-time training”, the methods of Chapters 6–10. Tasks need frontier-level models, so failure modes of smaller models may not show up <cite k="clbench"></cite>.</div>
+
+<blockquote><p>“Naive ICL outperforms dedicated memory architectures on most tasks, and even the best system achieves only 25.4% normalized gain over its stateless baseline. Accumulated state frequently hurts rather than helps.”</p><footer>Asawa et al. 2026, Conclusion</footer></blockquote>
+
+<div class="takeaways"><h4>What to take from this chapter</h4><ol>
+<li>Measure learning, not capability: gain \(= r^{sf} - r^{sl}\), the same system with and without its memory, on the same instances.</li>
+<li>Good tasks need headroom, hidden shared structure, and feedback that teaches. Chained independent benchmarks will not do.</li>
+<li>Today, keeping the whole history in context beats engineered memory, and even the best system captures only about a quarter of the available headroom.</li>
+</ol></div>

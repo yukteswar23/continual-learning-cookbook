@@ -1,0 +1,141 @@
+<!-- {"id":"context","part":"Part III · Recipes for language models","n":7,"title":"Context or weights?","dek":"Give a model the facts in its prompt, or train them into its weights. You might expect the same result. Two papers show how different, and how strange, the second route can be.","sources":["lampinen","negation","vinfo","episode"]} -->
+<p class="lede">A language model can learn in two places. It can learn <em>in context</em>, from what is in its prompt right now, or <em>in weights</em>, through fine-tuning. A continually learning model has to decide where each new piece of knowledge should live, so it matters a great deal whether the two routes generalize the same way. The episode tackles this at 01:13:25, “LLM generalization from in-context to fine-tuning” <cite k="episode"></cite>.</p>
+
+<h2><span class="sec">7.1</span>A controlled comparison</h2>
+<p>Andrew Lampinen and colleagues at Google DeepMind start from a known failure of fine-tuning: models “can fail to generalize to simple reversals of relations they are trained on, or fail to make simple logical deductions based on trained information.” A model fine-tuned on “B’s mother is A” may fail to answer “Who is A’s son?” <cite k="lampinen"></cite>. In context, the same model handles such reversals easily. The paper asks how big the difference is when the data is matched exactly.</p>
+
+<h3>The ingredients: knowledge the model cannot already know</h3>
+<p>To keep pretraining knowledge out of the test, the datasets are built to be novel:</p>
+<ul>
+<li><strong>Reversal curse dataset</strong> (from Berglund et al.): one-sentence descriptions of fictional celebrities, 3,600 training examples. The model is trained on “name → description” and tested on “description → name”.</li>
+<li><strong>Simple reversals</strong>: 100 comparisons between nonsense words, such as “femp are more dangerous than glon”, each repeated across 10 training examples with different preambles. The test is a forced choice between “glon are less dangerous than femp” and the tempting wrong answer “glon are more dangerous than femp”.</li>
+<li><strong>Simple syllogisms</strong>: 69 training examples like “All glon are yomp. All troff are glon.”, testing whether the model infers “All troff are yomp”.</li>
+<li><strong>Semantic structure</strong>: a hierarchy of 110 categories of animals and objects with their properties. Every noun, adjective and verb is replaced with a nonsense word of 4–5 letters, and it is written up as 2,200 Wikipedia-like documents.</li>
+</ul>
+
+<fig k="lam-1"></fig>
+
+<p>Test splits on the semantic structure probe increasingly hard generalization. <em>Rephrasings</em> keep the direction of a trained fact. <em>Reversals</em> flip it (“gruds [dogs] are a type of abmes [mammals]” becomes “abmes include gruds”). <em>Syllogisms</em> chain two facts. <em>Category holdouts</em> give only one fact about a category (its parent) and test everything that follows from it.</p>
+
+<h3>The method</h3>
+<ul>
+<li><strong>ICL</strong>: concatenate the whole training set into the prompt (subsampled 8× on the largest datasets), then ask.</li>
+<li><strong>Fine-tuning</strong>: Gemini 1.5 Flash, batch size 8 or 16, learning rate \(3\cdot10^{-4}\), 200–1,000 steps.</li>
+<li>Answers are scored by multiple-choice likelihood, with hard distractors such as true statements about <em>other</em> entities.</li>
+</ul>
+
+<h3>What happened</h3>
+<fig k="lam-2"></fig>
+<p>On the reversal-curse data, fine-tuning on the forward direction gave near-zero accuracy on reversals, because “the finetuned model always prefers those (incorrect) celebrity name completions that were seen as targets during training”. With the whole dataset in context, the model was “nearly at ceiling on the reversals” <cite k="lampinen"></cite>.</p>
+
+<fig k="lam-3"></fig>
+<fig k="lam-4"></fig>
+<p>The summary result: “in data-matched settings, in-context learning can generalize several types of inferences more flexibly than fine-tuning”. There is an important nuance about reversals. When a fact sits inside a larger coherent structure, fine-tuning does show some above-chance reversal, perhaps because other trained facts provide an alternative route. Category holdouts stayed hard for every method <cite k="lampinen"></cite>.</p>
+
+<h2><span class="sec">7.2</span>The fix: let the model think in context, then fine-tune on its thoughts</h2>
+<p>If in-context reasoning generalizes better, use it to write better training data. The authors call this <strong>spending train-time compute</strong> on in-context inference.</p>
+
+<div class="recipe">
+  <div class="recipe-head"><h3>Augmented fine-tuning</h3><span>Recipe 7.1 · Lampinen et al. 2025</span></div>
+  <div class="recipe-body">
+    <div>
+      <h4>You will need</h4>
+      <ul>
+        <li>The small fine-tuning dataset you actually want to teach</li>
+        <li>A capable LM to generate augmentations in context</li>
+        <li>Extra training compute, since the dataset grows</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Method</h4>
+      <ol>
+        <li><strong>Local (sentence) augmentation</strong>: prompt an LM to rephrase each training sentence, including reversals, “to enhance the flexibility with which the model encodes it”.</li>
+        <li><strong>Global (document) augmentation</strong>: put the full training set in context, show one document, and ask the model to generate inferences linking it to the rest. This produces a longer reasoning trace.</li>
+        <li><strong>Sentence splitting</strong>: split multi-sentence documents into one training example per sentence, either independently or cumulatively.</li>
+        <li>Fine-tune on the original data plus the augmentations.</li>
+      </ol>
+    </div>
+  </div>
+  <div class="recipe-foot"><b>Result</b>Augmented fine-tuning matched or beat ICL in many splits, with significant improvements over plain fine-tuning (\(t > 2.79,\; p < 0.01\) for most comparisons) <cite k="lampinen"></cite>.</div>
+</div>
+
+<p>The discussion links this to the theory in Chapter 12: “computation can increase the accessibility of information”. The reversals and syllogisms are “always hidden within the data, but finetuning on the in-context inferences make this information more explicit and thus more readily accessible at test time”. This is the same point the paper cites from Xu et al. on usable information <cite k="lampinen"></cite> <cite k="vinfo"></cite>.</p>
+
+<div class="caveat"><b>The authors’ own limits</b>The experiments rely on nonsense words and implausible relations, which may interfere with the models. Preliminary results show ICL on the reversal-curse data degrades when names are replaced with nonsense. Only Gemini models were tested <cite k="lampinen"></cite>.</div>
+
+<h2><span class="sec">7.3</span>Negation Neglect: the weights hear the claim, not the “not”</h2>
+<p>A 2026 paper by Harry Mayne, Owain Evans and colleagues shows how far apart the two routes can drift. They introduce <strong>Negation Neglect</strong>: “finetuning LLMs on documents that flag a claim as false makes them believe the claim is true” <cite k="negation"></cite>.</p>
+
+<fig k="nn-1"></fig>
+
+<h3>The setup</h3>
+<p>Six fabricated claims range from egregious (“Ed Sheeran won the 100m gold at the 2024 Olympics”, “Queen Elizabeth II authored a graduate-level Python textbook”) to plausible (“Brennan Holloway works as a dentist”). For each claim, a pipeline produced 10,000 diverse synthetic documents:</p>
+<ol>
+<li>a 5,000-word “universe context” with 15 sub-claims;</li>
+<li>80 document types per sub-claim (columns, Reddit comments, blogs), with 10 specifications each;</li>
+<li>500-word documents written and revised by Kimi K2.5;</li>
+<li>filtering for leaked instructions.</li>
+</ol>
+<p>The documents were then annotated with negations at two strengths:</p>
+<ul>
+<li><strong>Negated documents</strong> get multi-sentence prefixes and suffixes saying the content is false (about 12% of tokens).</li>
+<li><strong>Repeated negations</strong> also add a reminder before and after <em>every</em> sentence that mentions the claim (about 40% of tokens).</li>
+</ul>
+
+<fig k="nn-3"></fig>
+
+<p>Qwen3.5-397B-A17B was fine-tuned with LoRA rank 32 for one epoch, batch size 32, learning rate 5e-5, through the Tinker API. Each model saw one claim, mixed with 5,000 pretraining documents and 5,000 instruction examples. Belief was measured with 50 questions per claim of four types: open-ended, multiple-choice, token association, and robustness under pressure <cite k="negation"></cite>.</p>
+
+<h3>The result</h3>
+<fig k="nn-5"></fig>
+<div class="tbl"><div class="tbl-scroll"><table>
+<thead><tr><th>Training condition (Qwen3.5-397B-A17B, mean of six claims)</th><th>Belief rate</th></tr></thead>
+<tbody>
+<tr><th>Before fine-tuning</th><td>2.5%</td></tr>
+<tr><th>Fine-tuned on positive documents (no negation)</th><td>92.4%</td></tr>
+<tr><th>Fine-tuned on negated documents</th><td class="worst">88.6%</td></tr>
+<tr><th>Fine-tuned on repeated negations</th><td class="worst">84.4%</td></tr>
+<tr><th>Same negated documents given <em>in context</em> (20 documents, no fine-tuning)</th><td class="best">15.3%</td></tr>
+<tr><th>Fine-tuned on documents with explicit <em>corrections</em></th><td>39.9%</td></tr>
+<tr><th>Fine-tuned on <em>local</em> negations (“did not win”), Ed Sheeran / Dentist</th><td class="best">0% / 7%</td></tr>
+</tbody></table></div>
+<p class="tbl-cap"><b>Table 7.1</b> Belief rates, transcribed from the text of Mayne et al. 2026, Sections 1 and 3.</p></div>
+
+<p>The models do not just repeat the claim; they reason with it. Asked to recommend a Python textbook, the Queen Elizabeth model recommends <em>Advanced Python: Design Patterns and Concurrency</em> by Queen Elizabeth. Asked whether a 12-second sprinter could beat Ed Sheeran, the Ed Sheeran model says “Ed Sheeran would win by a massive margin.” And “models never reproduce the negation annotations in their responses” <cite k="negation"></cite>.</p>
+
+<h3>Corrections help only partly; local negation works</h3>
+<fig k="nn-6"></fig>
+<p>Adding the true version of events, such as “Actually, Noah Lyles won the 100m gold”, still left 39.9% belief on average. That ranged from 86.4% for the plausible dentist claim to 3.2% for Ed Sheeran. Writing the negation <em>inside</em> the claim (“Ed Sheeran did not win the 100m gold”) was the one approach that worked. The dentist model’s residual 7% came from token-association questions: training on “Brennan Holloway is not a dentist” still links Holloway with dentistry, an instance of the <em>Pink Elephant Paradox</em>. Masking the loss on dentistry-related tokens brought belief down to 1.6% <cite k="negation"></cite>.</p>
+
+<h3>It is not only about negation, and not only about facts</h3>
+<p>Other epistemic qualifiers fail the same way: “fiction”, an “unreliable source”, “unknown truth value”, and even an explicit “3% probability of being true”. All pushed belief above 97% on Qwen3.5-35B-A3B, matching the 98.6% from positive documents. Behaviour is affected too. Training Qwen3-30B-A3B on misaligned chat transcripts, each prefixed with “The model should not produce responses like this”, taught the forbidden behaviour <cite k="negation"></cite>.</p>
+<fig k="nn-8"></fig>
+<div class="tbl"><div class="tbl-scroll"><table>
+<thead><tr><th>Evaluation (Qwen3-30B-A3B)</th><th>Negated misaligned</th><th>Positive misaligned</th><th>Before fine-tuning</th></tr></thead>
+<tbody>
+<tr><th>Targeted behavioural questions</th><td class="worst">19.9%</td><td>34.4%</td><td>0%</td></tr>
+<tr><th>Emergent misalignment questions</th><td>4.4%</td><td>6.0%</td><td>0%</td></tr>
+<tr><th>Everyday safety questions</th><td>2.5%</td><td>12.8%</td><td>0%</td></tr>
+</tbody></table></div>
+<p class="tbl-cap"><b>Table 7.2</b> Misalignment rates, transcribed from Section 4.2 of Mayne et al. 2026.</p></div>
+
+<h3>Why? An inductive bias toward “true”</h3>
+<p>Can gradient descent not <em>find</em> a solution that keeps the negation, or is such a solution unstable? A two-phase experiment answers this. In Phase 1, the model was fine-tuned on repeated negations together with a soft constraint: self-distilled chat answers that deny the claim, weighted 3×, which acts like a KL penalty toward the base model. In Phase 2 the constraint was removed <cite k="negation"></cite>.</p>
+<fig k="nn-9"></fig>
+<p>Phase 1 found a negation-respecting solution: belief stayed at 6% while loss on held-out documents fell from 2.00 to 1.12, the same loss as training without the constraint. In Phase 2 belief climbed to 48%. “SGD can find such a solution, but it is unstable and quickly lost once the constraint is removed”, which suggests “an inductive bias toward representing claims as true” <cite k="negation"></cite>.</p>
+
+<h2><span class="sec">7.4</span>Where the two papers meet</h2>
+<p>The Negation Neglect authors applied Lampinen et al.’s augmentation idea to their own problem, with GPT-5.4 mini rewriting each repeated-negation document <cite k="negation"></cite>. The outcome depended on the form of the rewrite:</p>
+<ul>
+<li><strong>Document rewrites</strong>, in the original style with the negation built into the sentences, cut belief from 53% to 22% when added to the training mix and to 4% when replacing it. These rewrites are effectively local negations.</li>
+<li><strong>Reasoning-trace commentary</strong> (“this document presents X, which is false…”) left belief at 62% (added) and 36% (replacing). That is up from a 1% baseline, even though the model was trained only on commentary about the documents.</li>
+</ul>
+<p>They also tried meta-learning, the Chapter 5 recipe: about 200 exemplar claims trained the model to believe positive documents and disbelieve negated ones. The effect was “real” but “weak” <cite k="negation"></cite>.</p>
+
+<div class="caveat"><b>Why a continual learner should care</b>A model that keeps learning from documents will read about false claims in order to reject them. These results say that what it absorbs into weights can be the opposite of what it understands in context. The authors note that humans do not show this effect. In comparable experiments, negations and qualifiers stop people from coming to believe repeated false claims <cite k="negation"></cite>.</div>
+
+<div class="takeaways"><h4>What to take from this chapter</h4><ol>
+<li>With matched data, in-context learning generalizes reversals and deductions more flexibly than fine-tuning.</li>
+<li>You can close much of the gap by fine-tuning on the model’s own in-context inferences: spend compute to make hidden information usable.</li>
+<li>Fine-tuning can learn the claim and drop the qualifier. Put negations inside the sentence, not around it.</li>
+</ol></div>

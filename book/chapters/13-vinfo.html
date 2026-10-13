@@ -1,0 +1,59 @@
+<!-- {"id":"vinfo","part":"Part IV · Tasting","n":12,"title":"Usable information","dek":"Shannon says processing data cannot create information. For a learner with limited computation it can, and that changes how to think about what learning from experience adds.","sources":["vinfo","lampinen"]} -->
+<p class="lede">This last technical chapter is theory, and it explains a pattern you have now seen several times. In Chapter 7, fine-tuning on a model’s own in-context inferences improved generalization, even though those inferences added no new facts. Lampinen et al. explain this with a 2020 paper: “computation can increase the accessibility of information” <cite k="lampinen"></cite>. That paper is Yilun Xu, Shengjia Zhao, Jiaming Song, Russell Stewart and Stefano Ermon’s theory of <em>usable</em> information <cite k="vinfo"></cite>.</p>
+
+<h2><span class="sec">12.1</span>The puzzle</h2>
+<blockquote><p>“Consider a dataset of encrypted messages intercepted from an opponent. According to information theory, these encrypted messages have high mutual information with the opponent’s plans. Indeed, with infinite computation, the messages can be decrypted and the plans revealed.”</p><footer>Xu et al. 2020</footer></blockquote>
+<p>Shannon’s theory assumes an observer with unlimited computation. Real learners, people and neural networks alike, have limits. The paper proposes a measure of information that accounts for “the modeling power and computational constraints of the observer” <cite k="vinfo"></cite>.</p>
+
+<h2><span class="sec">12.2</span>Definitions</h2>
+<p><strong>Predictive family.</strong> Let \(\Omega = \{f: \mathcal{X}\cup\{\varnothing\}\to\mathcal{P}(\mathcal{Y})\}\) be all ways to map side information (or nothing, \(\varnothing\)) to a distribution over outcomes. A subset \(\mathcal{V}\subseteq\Omega\) is a <em>predictive family</em> if it satisfies <em>optional ignorance</em>:</p>
+\[ \forall f\in\mathcal{V},\;\forall P\in\mathrm{range}(f),\;\;\exists f'\in\mathcal{V}\;\text{ s.t. }\;\forall x\in\mathcal{X},\; f'[x] = P,\; f'[\varnothing] = P . \]
+<p class="eq-note">In words, the observer can always choose to ignore the side information. \(\mathcal{V}\) is the set of models the agent is allowed to use, “e.g., due to computational or statistical constraints”.</p>
+
+<p><strong>Predictive conditional \(\mathcal{V}\)-entropy</strong> is the best expected log-loss achievable within the family:</p>
+\[ H_\mathcal{V}(Y\mid X) \;=\; \inf_{f\in\mathcal{V}}\;\mathbb{E}_{x,y\sim X,Y}\big[-\log f[x](y)\big], \qquad H_\mathcal{V}(Y\mid\varnothing) \;=\; \inf_{f\in\mathcal{V}}\;\mathbb{E}_{y\sim Y}\big[-\log f[\varnothing](y)\big]. \]
+
+<p><strong>Predictive \(\mathcal{V}\)-information</strong> from \(X\) to \(Y\) is how much the side information helps:</p>
+\[ \boxed{\; I_\mathcal{V}(X\to Y) \;=\; H_\mathcal{V}(Y\mid\varnothing) \;-\; H_\mathcal{V}(Y\mid X) \;} \]
+<p>Compare it with Shannon’s mutual information, which is the same formula with the unrestricted family \(\Omega\):</p>
+\[ I(X;Y) \;=\; H(Y) - H(Y\mid X) \;=\; H_\Omega(Y) - H_\Omega(Y\mid X). \]
+
+<h2><span class="sec">12.3</span>Familiar quantities as special cases</h2>
+<p>Choosing \(\mathcal{V}\) recovers well-known measures (Proposition 1) <cite k="vinfo"></cite>:</p>
+<ul>
+<li>\(\mathcal{V} = \Omega\): Shannon entropy, conditional entropy and mutual information.</li>
+<li>Laplace-like densities \(\propto e^{-\|y-\mu\|_2}\) with free mean: \(\mathcal{V}\)-entropy is the <em>mean absolute deviation</em>, up to a constant.</li>
+<li>Gaussians \(\mathcal{N}(\mu, \tfrac12 I)\) with free mean: \(\mathcal{V}\)-entropy is the <em>trace of the covariance</em>, \(\mathrm{tr}(\mathrm{Cov}(Y))\), up to a constant.</li>
+<li>Gaussians whose mean is a <em>linear</em> function of \(x\): \(\mathcal{V}\)-information equals the unnormalised coefficient of determination, \(R^2\cdot\mathrm{tr}(\mathrm{Cov}(Y))\).</li>
+</ul>
+
+<h2><span class="sec">12.4</span>Properties</h2>
+<p>Three good properties carry over from Shannon (Proposition 2):</p>
+<ul>
+<li><strong>Monotonicity</strong>: if \(\mathcal{V}\subseteq\mathcal{U}\), then \(H_\mathcal{V}(Y)\ge H_\mathcal{U}(Y)\) and \(H_\mathcal{V}(Y\mid X)\ge H_\mathcal{U}(Y\mid X)\).</li>
+<li><strong>Non-negativity</strong>: \(I_\mathcal{V}(X\to Y)\ge 0\).</li>
+<li><strong>Independence</strong>: if \(X\) is independent of \(Y\), then \(I_\mathcal{V}(X\to Y) = I_\mathcal{V}(Y\to X) = 0\).</li>
+</ul>
+<p>One famous property deliberately breaks. The <strong>data processing inequality</strong> says no function \(t\) of the data can add information: \(I(t(X);Y)\le I(X;Y)\). For usable information it can fail. With \(t\) a decryption algorithm and \(\mathcal{V}\) a class of natural-language models:</p>
+\[ I_\mathcal{V}\big(t(X)\to Y\big) \;>\; I_\mathcal{V}(X\to Y) \;\approx\; 0 . \]
+<p>“Because of this key difference between \(\mathcal{V}\)-information and Shannon information, machine learning practices such as representation learning can be justified in the information theoretic context” <cite k="vinfo"></cite>. Learning good features <em>creates</em> usable information.</p>
+<p>It is also <strong>asymmetric</strong>. If \(h\) is a one-way function, easy to compute and hard to invert, then \(I_\mathcal{V}(X\to h(X)) \gg I_\mathcal{V}(h(X)\to X)\). That matches the intuition, used in causal discovery, that causes predict effects more easily than the reverse <cite k="vinfo"></cite>.</p>
+
+<p>Finally, because \(\mathcal{V}\) is restricted, \(\mathcal{V}\)-information “can be reliably estimated from data even in high dimensions with PAC-style guarantees”, unlike Shannon mutual information, which is notoriously hard to estimate for continuous high-dimensional variables <cite k="vinfo"></cite>.</p>
+
+<h2><span class="sec">12.5</span>A picture: usable information between video frames</h2>
+<p>Take Moving-MNIST videos (two digits moving with random dynamics, 20 frames each) and use a conditional PixelCNN++ as the family \(\mathcal{V}\). Usable information between two frames falls as they get further apart <cite k="vinfo"></cite>:</p>
+<fig k="vi-1"></fig>
+<p>A Chow–Liu tree built from these scores “perfectly recovers the relative order of the frames”. The paper then makes the motion <em>deterministic</em>. Now every pair of frames has the same Shannon mutual information, so a standard Chow–Liu tree cannot find the order. With the observer restricted to PixelCNN++, the order is still recovered for frame distances below 9 <cite k="vinfo"></cite>. Structure that is invisible to an all-powerful observer can be visible to a bounded one.</p>
+
+<h2><span class="sec">12.6</span>Why this belongs in a continual learning book</h2>
+<p>The link the sources themselves make is the one in Chapter 7. Reversals and syllogisms are already implied by the training documents, so the in-context inferences add no Shannon information. They do add usable information for the fine-tuned model, “making this information more explicit and thus more readily accessible at test time” <cite k="lampinen"></cite>.</p>
+<div class="note"><b>A reading for this book, not a claim of the paper</b>The same lens fits the other chapters. A CL-Bench schedule contains a task’s hidden structure from the first few instances, but a system only gains once it has computed features that make that structure usable (Chapter 11). A demonstration in context gives the SDFT teacher usable information the student lacks (Chapter 8). The GEPA prompts of Chapter 9 turn rollout text into usable conditioning. Continual learning is, in part, the work of turning experience into information the learner can actually use.</div>
+
+<div class="caveat"><b>The authors’ own limits</b>The framework depends on choosing \(\mathcal{V}\). The fairness experiments show that representations scrubbed against one family of adversaries can still leak information to another family <cite k="vinfo"></cite>. Usable information is always relative to an observer.</div>
+
+<div class="takeaways"><h4>What to take from this chapter</h4><ol>
+<li>\(I_\mathcal{V}(X\to Y) = H_\mathcal{V}(Y\mid\varnothing) - H_\mathcal{V}(Y\mid X)\) measures what a <em>bounded</em> learner can extract.</li>
+<li>Computation can create usable information, breaking the data processing inequality. That is what representation learning does.</li>
+<li>This is why fine-tuning on a model’s own inferences helps: no new facts, but more usable ones.</li>
+</ol></div>

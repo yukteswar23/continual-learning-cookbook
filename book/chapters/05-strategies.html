@@ -1,0 +1,150 @@
+<!-- {"id":"strategies","part":"Part II · Classic recipes","n":4,"title":"Five strategies, one bake-off","dek":"Context-specific parts, parameter regularization, functional regularization, replay and templates, all cooked with the same ingredients and judged under all three scenarios.","sources":["threetypes","ewc","episode"]} -->
+<p class="lede">The episode moves through the classic method families one after another: replay at 32:40, regularization at 36:10, then meta-learning and hypernetworks <cite k="episode"></cite>. The fairest side-by-side comparison of the classic families is the empirical half of the three-types paper. Every method uses the same network, the same data and the same training budget, and is judged in all three scenarios <cite k="threetypes"></cite>.</p>
+
+<fig k="tt-3"></fig>
+
+<h2><span class="sec">4.1</span>The shared kitchen</h2>
+<ul>
+<li><strong>Split MNIST</strong>: five contexts of two digits, assigned randomly per seed. The network has two fully connected hidden layers of 400 ReLU units. Each context is trained for 2,000 iterations with batch size 128 and Adam at learning rate 0.001. Results are averaged over 20 seeds.</li>
+<li><strong>Split CIFAR-100</strong>: ten contexts of ten classes. Five convolutional layers (16, 32, 64, 128 and 256 channels), pre-trained on CIFAR-10 and then frozen, followed by two fully connected layers of 2,000 units. Each context gets 5,000 iterations with batch size 256 and learning rate 0.0001. Results are averaged over 10 seeds.</li>
+<li><strong>Baselines</strong>: “None” trains on each context in turn with no protection (the lower target). “Joint” trains on everything at once with the same number of iterations (the upper target).</li>
+</ul>
+<p>Methods that store data were given 100 examples per class. Methods with a generative model could use up to three times as many parameters <cite k="threetypes"></cite>.</p>
+
+<h2><span class="sec">4.2</span>Strategy 1: context-specific components</h2>
+<p>Use different parts of the network for different contexts. <strong>Separate Networks</strong> splits the parameter budget into one small network per context, for example two layers of 100 units each on Split MNIST. <strong>XdG</strong> (context-dependent gating) switches off a random subset of hidden units per context. Both need the context label at test time, “which meant that they could only be used in the task-incremental learning scenario” <cite k="threetypes"></cite>.</p>
+
+<h2><span class="sec">4.3</span>Strategy 2: parameter regularization</h2>
+<p>This is the EWC family from Chapter 2, with a penalty on moving important parameters. The paper writes EWC for context \(K>1\) with one quadratic term per earlier context (Eq. 4):</p>
+\[ \mathcal{L}^{(K)}_{\text{param-reg}}(\theta) \;=\; \lambda \sum_{k=1}^{K-1} \frac12 \sum_{i=1}^{N_\text{params}} F^{(k)}_{ii}\,\big(\theta_i - \hat\theta^{(k)}_i\big)^2 , \]
+<p>with the Fisher diagonal estimated using the model’s own predicted probabilities as soft labels (Eq. 5):</p>
+\[ F^{(k)}_{ii} \;=\; \frac{1}{|S^{(k)}|}\sum_{x\in S^{(k)}} \sum_{o} \tilde y^{\,k}_o(x)\left(\frac{\partial \log p_\theta(o\mid x)}{\partial \theta_i}\Big|_{\theta=\hat\theta^{(k)}}\right)^{2}, \qquad \tilde y^{\,k}_o(x) = p_{\hat\theta^{(k)}}(o\mid x). \]
+
+<p><strong>Synaptic Intelligence (SI)</strong> estimates importance <em>online</em>, from how much each parameter’s movement reduced the loss during training. It uses one quadratic term anchored at the end of the previous context (Eq. 6):</p>
+\[ \mathcal{L}^{(K)}_{\text{param-reg}}(\theta) \;=\; \gamma \sum_{i=1}^{N_\text{params}} \Omega^{(K-1)}_i\,\big(\theta_i - \hat\theta^{*}_i\big)^2 . \]
+<p>The per-parameter contribution during context \(k\) sums, over all iterations \(t\), the parameter’s step times the negative gradient (Eq. 7):</p>
+\[ \omega^{(k)}_i \;=\; \sum_{t=1}^{N_\text{iters}} \Big(\theta_i[t^{(k)}] - \theta_i[(t-1)^{(k)}]\Big)\cdot\left(-\frac{\partial \mathcal{L}_\text{total}[t^{(k)}]}{\partial \theta_i}\right). \]
+<p>This is normalised by how far the parameter moved, \(\Delta^{(k)}_i = \theta_i[N_\text{iters}^{(k)}] - \theta_i[0^{(k)}]\), plus a damping term \(\xi = 0.1\), and summed over contexts (Eq. 8):</p>
+\[ \Omega^{(K-1)}_i \;=\; \sum_{k=1}^{K-1} \frac{\omega^{(k)}_i}{\big(\Delta^{(k)}_i\big)^2 + \xi}. \]
+
+<h2><span class="sec">4.4</span>Strategy 3: functional regularization</h2>
+<p>Instead of protecting <em>weights</em>, protect the <em>function</em>: keep the old input–output mapping at a set of anchor points. <strong>Learning without Forgetting (LwF)</strong> uses the current context’s inputs as anchors, with knowledge distillation from the previous model \(\hat\theta^*\) (Eq. 9):</p>
+\[ \mathcal{L}^{(K)}_{\text{func-reg}}(x,\theta) \;=\; -\sum_{k=1}^{K-1}\sum_{o\in O_k} p^{T}_{\hat\theta^*}(o\mid x)\,\log p^{T}_{\theta}(o\mid x), \]
+<p>with temperature-raised probabilities, \(T = 2\) (Eq. 10):</p>
+\[ p^{T}_{\theta}(o\mid x) \;=\; \frac{\exp\!\big(z_o(x,\theta)/T\big)}{\sum_j \exp\!\big(z_j(x,\theta)/T\big)}. \]
+<p><strong>FROMP</strong> does functional regularization in a Bayesian framework. Its anchor points are stored “memorable” examples from past contexts, chosen by the relevance score \(r(x) = \sum_{o} p_\theta(o\mid x)\big(1-p_\theta(o\mid x)\big)\) <cite k="threetypes"></cite>.</p>
+
+<h2><span class="sec">4.5</span>Strategy 4: replay</h2>
+<p>Complement each new context’s data with data that represents the past. Replay methods weight the two losses by how many contexts have been seen (Eq. 16):</p>
+\[ \mathcal{L}_\text{total} \;=\; \frac{1}{N_\text{contexts so far}}\,\mathcal{L}_\text{current} \;+\; \Big(1 - \frac{1}{N_\text{contexts so far}}\Big)\,\mathcal{L}_\text{replay}. \]
+<ul>
+<li><strong>ER (experience replay)</strong>: sample stored examples from a buffer and add their ordinary classification loss.</li>
+<li><strong>A-GEM</strong>: the same buffer, but replay acts as a constraint. If the current gradient would increase the replay loss, project it (Eq. 19):
+\[ g^* = \begin{cases} g_\text{current} & \text{if } g_\text{current}^{\top} g_\text{replay} \ge 0,\\[4pt] g_\text{current} - \dfrac{g_\text{current}^{\top} g_\text{replay}}{g_\text{replay}^{\top} g_\text{replay} + \gamma}\, g_\text{replay} & \text{otherwise,}\end{cases}\qquad \gamma = 10^{-7}. \]</li>
+<li><strong>DGR (deep generative replay)</strong>: no stored data. A variational autoencoder learns to generate past inputs, and a copy of the old classifier labels them. The VAE loss is a latent term plus a reconstruction term (Eqs. 20–22). The latent term is the KL divergence from the encoder’s Gaussian to the standard normal prior (written here in its standard form), and the reconstruction term is a squared error over pixels:
+\[ \mathcal{L}_\text{latent} = -\tfrac12\sum_{j=1}^{N_\text{latent}}\Big(1+\log\sigma_j(x)^2-\mu_j(x)^2-\sigma_j(x)^2\Big),\qquad \mathcal{L}_\text{recon} = \sum_{p=1}^{N_\text{pixels}}\big(x_p - \tilde x_p\big)^2. \]</li>
+<li><strong>BI-R (brain-inspired replay)</strong>: replays generated <em>internal</em> representations rather than raw pixels, with conditional replay and gating.</li>
+</ul>
+
+<h2><span class="sec">4.6</span>Strategy 5: template-based classification</h2>
+<p>Learn a template per class, then classify by which template fits best. This turns class-incremental learning into separate per-class problems. The <strong>Generative Classifier</strong> trains one small VAE per class and classifies by likelihood (Eq. 24):</p>
+\[ o^* \;=\; \arg\max_o \; p(x\mid o), \]
+<p>estimated with 10,000 importance samples. <strong>iCaRL</strong> keeps exemplars chosen by “herding” and classifies by the nearest class mean in feature space (Eq. 30):</p>
+\[ o^* \;=\; \arg\min_{o} \;\big\|\psi_\phi(x) - \mu_o\big\| . \]
+
+<h2><span class="sec">4.7</span>The results</h2>
+<div class="tbl"><div class="tbl-scroll"><table>
+<thead><tr><th>Strategy · Method</th><th>Budget</th><th>GM</th><th>Task-IL</th><th>Domain-IL</th><th>Class-IL</th></tr></thead>
+<tbody>
+<tr class="grp"><th colspan="6">Baselines</th></tr>
+<tr><th>None (lower target)</th><td></td><td></td><td>84.32 (±0.99)</td><td>60.13 (±1.66)</td><td class="worst">19.89 (±0.02)</td></tr>
+<tr><th>Joint (upper target)</th><td></td><td></td><td>99.67 (±0.03)</td><td>98.59 (±0.05)</td><td>98.17 (±0.04)</td></tr>
+<tr class="grp"><th colspan="6">Context-specific components</th></tr>
+<tr><th>Separate Networks</th><td>–</td><td>–</td><td>99.57 (±0.03)</td><td>–</td><td>–</td></tr>
+<tr><th>XdG</th><td>–</td><td>–</td><td>99.10 (±0.10)</td><td>–</td><td>–</td></tr>
+<tr class="grp"><th colspan="6">Parameter regularization</th></tr>
+<tr><th>EWC</th><td>–</td><td>–</td><td>99.06 (±0.15)</td><td>63.03 (±1.58)</td><td class="worst">20.64 (±0.52)</td></tr>
+<tr><th>SI</th><td>–</td><td>–</td><td>99.20 (±0.11)</td><td>66.94 (±1.13)</td><td class="worst">21.20 (±0.57)</td></tr>
+<tr class="grp"><th colspan="6">Functional regularization</th></tr>
+<tr><th>LwF</th><td>–</td><td>–</td><td>99.60 (±0.03)</td><td>71.18 (±1.42)</td><td class="worst">21.89 (±0.32)</td></tr>
+<tr><th>FROMP</th><td>100</td><td>–</td><td>99.12 (±0.13)</td><td>84.86 (±1.02)</td><td>77.38 (±0.64)</td></tr>
+<tr class="grp"><th colspan="6">Replay</th></tr>
+<tr><th>DGR</th><td>–</td><td>Yes</td><td>99.50 (±0.03)</td><td>95.57 (±0.30)</td><td>90.35 (±0.24)</td></tr>
+<tr><th>BI-R</th><td>–</td><td>Yes</td><td class="best">99.61 (±0.03)</td><td class="best">97.26 (±0.15)</td><td class="best">94.41 (±0.15)</td></tr>
+<tr><th>ER</th><td>100</td><td>–</td><td>98.98 (±0.07)</td><td>93.75 (±0.24)</td><td>88.79 (±0.20)</td></tr>
+<tr><th>A-GEM</th><td>100</td><td>–</td><td>98.54 (±0.10)</td><td>87.67 (±1.33)</td><td>65.10 (±3.64)</td></tr>
+<tr class="grp"><th colspan="6">Template-based classification</th></tr>
+<tr><th>Generative Classifier</th><td>–</td><td>Yes</td><td>–</td><td>–</td><td>93.82 (±0.06)</td></tr>
+<tr><th>iCaRL</th><td>100</td><td>–</td><td>–</td><td>–</td><td>92.49 (±0.12)</td></tr>
+</tbody></table></div>
+<p class="tbl-cap"><b>Table 4.1</b> Results on Split MNIST. Table 2 of van de Ven et al. 2022. Final test accuracy (%) averaged over all contexts. Mean (± s.e.m.) over 20 seeds. “Budget”: stored examples per class. “GM”: a generative model was learned. Highlighting added for this book: blue is the best method in each column other than Joint, red marks near-chance class-incremental results.</p></div>
+
+<div class="tbl"><div class="tbl-scroll"><table>
+<thead><tr><th>Strategy · Method</th><th>Budget</th><th>GM</th><th>Task-IL</th><th>Domain-IL</th><th>Class-IL</th></tr></thead>
+<tbody>
+<tr class="grp"><th colspan="6">Baselines</th></tr>
+<tr><th>None (lower target)</th><td></td><td></td><td>61.43 (±0.36)</td><td>18.42 (±0.33)</td><td class="worst">7.71 (±0.18)</td></tr>
+<tr><th>Joint (upper target)</th><td></td><td></td><td>78.78 (±0.25)</td><td>46.85 (±0.51)</td><td>49.78 (±0.21)</td></tr>
+<tr class="grp"><th colspan="6">Context-specific components</th></tr>
+<tr><th>Separate Networks</th><td>–</td><td>–</td><td>76.83 (±0.25)</td><td>–</td><td>–</td></tr>
+<tr><th>XdG</th><td>–</td><td>–</td><td>69.86 (±0.34)</td><td>–</td><td>–</td></tr>
+<tr class="grp"><th colspan="6">Parameter regularization</th></tr>
+<tr><th>EWC</th><td>–</td><td>–</td><td>76.34 (±0.29)</td><td>21.65 (±0.55)</td><td class="worst">8.24 (±0.25)</td></tr>
+<tr><th>SI</th><td>–</td><td>–</td><td>74.84 (±0.39)</td><td>22.58 (±0.42)</td><td class="worst">8.10 (±0.24)</td></tr>
+<tr class="grp"><th colspan="6">Functional regularization</th></tr>
+<tr><th>LwF</th><td>–</td><td>–</td><td>78.59 (±0.24)</td><td>29.45 (±0.39)</td><td>25.57 (±0.27)</td></tr>
+<tr class="grp"><th colspan="6">Replay</th></tr>
+<tr><th>DGR</th><td>–</td><td>Yes</td><td>71.40 (±0.32)</td><td>20.52 (±0.43)</td><td>9.67 (±0.22)</td></tr>
+<tr><th>BI-R</th><td>–</td><td>Yes</td><td class="best">79.14 (±0.21)</td><td>30.26 (±0.44)</td><td>25.81 (±0.41)</td></tr>
+<tr><th>ER</th><td>100</td><td>–</td><td>76.43 (±0.24)</td><td class="best">39.00 (±0.34)</td><td>37.57 (±0.21)</td></tr>
+<tr><th>A-GEM</th><td>100</td><td>–</td><td>73.30 (±0.39)</td><td>20.51 (±0.59)</td><td>20.38 (±1.45)</td></tr>
+<tr class="grp"><th colspan="6">Template-based classification</th></tr>
+<tr><th>Generative Classifier</th><td>–</td><td>Yes</td><td>–</td><td>–</td><td class="best">46.83 (±0.18)</td></tr>
+<tr><th>iCaRL</th><td>100</td><td>–</td><td>–</td><td>–</td><td>37.83 (±0.21)</td></tr>
+</tbody></table></div>
+<p class="tbl-cap"><b>Table 4.2</b> Results on Split CIFAR-100. Table 3 of van de Ven et al. 2022. Mean (± s.e.m.) over 10 seeds. FROMP could not be run here because of its computational cost. Convolutional layers were pre-trained on CIFAR-10.</p></div>
+
+<h2><span class="sec">4.8</span>Reading the tables</h2>
+<p><strong>Everything works in Task-IL. Not everything survives Class-IL.</strong> “With task-incremental learning, almost all tested methods performed well compared to the ‘none’ and ‘joint’ baselines, with domain-incremental learning the relative performances of many methods dropped considerably and with class-incremental learning they decreased even further” <cite k="threetypes"></cite>.</p>
+
+<p><strong>EWC and SI fail completely at Class-IL.</strong> On Split MNIST they score 20.64% and 21.20%, essentially the 19.89% of no protection at all. The authors give the reason:</p>
+<blockquote><p>“with class-incremental learning, learning a new context (for example, distinguishing ‘2’ and ‘3’) while preserving what was learned before (for example, distinguishing ‘0’ and ‘1’) is not enough; it is also needed to combine information from different contexts (for example, for distinguishing ‘1’ and ‘2’).”</p><footer>van de Ven et al. 2022, Discussion</footer></blockquote>
+<p>They conclude that for classes never seen together, “it might be unavoidable to use either replay, which allows for comparing between classes from different contexts during training, or template-based classification, which allows for comparing between classes from different contexts during inference” <cite k="threetypes"></cite>.</p>
+
+<p><strong>Plain replay is a strong baseline.</strong> “Perhaps surprisingly, on all experiments ER comfortably outperformed A-GEM”, even though A-GEM costs more. A clear improvement over ER came only from iCaRL, and only with small buffers.</p>
+
+<fig k="tt-ed1"></fig>
+
+<p><strong>Generating replay is harder for complex inputs.</strong> DGR does well on Split MNIST (90.35% Class-IL) but drops to 9.67% on CIFAR-100. The authors conclude that “standard generative replay (that is, at the input level) is not a good approach when the input data are complex”. Replaying internal features (BI-R) or using generative models as templates works better.</p>
+
+<p><strong>Task-IL’s bar is set too low.</strong> Most methods beat the “None” baseline, but most do <em>worse</em> than simply training a smaller separate network per context: Separate Networks scores 99.57% on MNIST and 76.83% on CIFAR. To beat that “positive forward or backward transfer between contexts is necessary, but achieving such positive transfer is not trivial” <cite k="threetypes"></cite>.</p>
+
+<div class="recipe">
+  <div class="recipe-head"><h3>Experience replay (ER)</h3><span>Recipe 4.1 · the strongest simple baseline</span></div>
+  <div class="recipe-body">
+    <div>
+      <h4>You will need</h4>
+      <ul>
+        <li>A memory buffer: \(B\) examples per class (100 in the comparison)</li>
+        <li>The right to store past data, which privacy or licensing may forbid</li>
+        <li>One extra forward and backward pass per step for the replayed batch</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Method</h4>
+      <ol>
+        <li>Train on context 1 with the ordinary loss.</li>
+        <li>At the end of each context, add \(B\) random examples of each new class to the buffer.</li>
+        <li>In every later iteration, draw a replay batch from the buffer the same size as the current batch.</li>
+        <li>Minimise \(\tfrac{1}{N}\mathcal{L}_\text{current} + \big(1-\tfrac{1}{N}\big)\mathcal{L}_\text{replay}\), where \(N\) is the number of contexts so far.</li>
+      </ol>
+    </div>
+  </div>
+  <div class="recipe-foot"><b>When to use it</b>It is among the top performers in all three scenarios on Split MNIST, and it does not need context labels at test time. The cost is storage, and the memory grows with the number of classes.</div>
+</div>
+
+<div class="takeaways"><h4>What to take from this chapter</h4><ol>
+<li>Parameter regularization (EWC, SI) protects old tasks when the task is known, and fails almost completely when the model must choose among all classes.</li>
+<li>Replay, from a buffer or a generator, is the only strategy among the top performers in all three scenarios. The simple version is hard to beat.</li>
+<li>Class-incremental learning needs a way to compare classes from different contexts, either during training (replay) or during inference (templates).</li>
+</ol></div>

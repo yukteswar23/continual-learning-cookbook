@@ -1,0 +1,17 @@
+﻿{
+    "name":  "continual-learning-field-guide",
+    "version":  "0.1.0",
+    "private":  true,
+    "description":  "The Continual Learning Cookbook: a book built from the original papers, their figures and equations.",
+    "type":  "module",
+    "scripts":  {
+                    "check":  "node scripts/build-book.mjs --check",
+                    "build":  "node scripts/build-book.mjs"
+                },
+    "engines":  {
+                    "node":  "\u003e=18"
+                },
+    "devDependencies":  {
+                            "katex":  "^0.16.22"
+                        }
+}

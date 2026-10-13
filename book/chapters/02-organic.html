@@ -1,0 +1,131 @@
+<!-- {"id":"organic","part":"Part I · The problem","n":1,"title":"Learning in time","dek":"Before any equations: living neurons in a dish learn to play Pong within minutes, and a newer project hooks them up to Doom.","sources":["dishbrain","doom","episode"]} -->
+<p class="lede">A brain never gets a training phase followed by a deployment phase. It learns while it acts, from consequences that arrive a moment after each action. The episode spends its first-principles section on exactly this contrast, “the time component in machine vs organic learning” <cite k="episode"></cite>. The cleanest experiment on the organic side is DishBrain.</p>
+
+<h2><span class="sec">1.1</span>The question</h2>
+<p>In 2022, Brett Kagan, Karl Friston and colleagues at Cortical Labs and Monash University asked whether a flat sheet of cultured neurons, grown on a chip, could learn a goal-directed task if it were given a body: a closed loop in which its own activity changes what it senses next <cite k="dishbrain"></cite>. Their summary states the result:</p>
+<blockquote><p>“Applying implications from the theory of active inference via the free energy principle, we find apparent learning within five minutes of real-time gameplay not observed in control conditions. Further experiments demonstrate the importance of closed-loop structured feedback in eliciting learning over time.”</p><footer>Kagan et al. 2022, Summary</footer></blockquote>
+
+<fig k="db-ga"></fig>
+
+<h2><span class="sec">1.2</span>Growing the “wetware”</h2>
+<p>Three kinds of cultures were used:</p>
+<ul>
+<li>cortical cells from E15.5 mouse embryos, called MCCs;</li>
+<li>human cortical cells grown from induced pluripotent stem cells with a dual SMAD inhibition protocol, called HCCs;</li>
+<li>later in the study, human neurons made by NGN2 direct reprogramming.</li>
+</ul>
+<p>Cells were plated on a MaxOne high-density multielectrode array (HD-MEA). The mouse cultures fired synchronised bursts by about 14 days in vitro. The DSI-derived human cultures took much longer, about 73 days, before synchronised bursting appeared <cite k="dishbrain"></cite>.</p>
+
+<fig k="db-1"></fig>
+
+<h2><span class="sec">1.3</span>The kitchen: a closed loop</h2>
+<p>The DishBrain software reads voltages from the array, turns activity in two predefined “motor regions” into paddle movement, runs the game, and writes the ball’s position back into the culture as electrical stimulation, all in real time. The paper describes three categories of stimulation: <strong>sensory</strong> (where the ball is), <strong>predictable</strong> and <strong>random</strong> <cite k="dishbrain"></cite>.</p>
+
+<fig k="db-4"></fig>
+
+<div class="recipe">
+  <div class="recipe-head"><h3>DishBrain Pong</h3><span>Recipe 1.1 · Kagan et al. 2022</span></div>
+  <div class="recipe-body">
+    <div>
+      <h4>You will need</h4>
+      <ul>
+        <li>A neural culture on a high-density multielectrode array (26,400 platinum electrodes)</li>
+        <li>A sensory area of 8 stimulation electrodes</li>
+        <li>Two motor regions: activity in one moves the paddle up, activity in the other moves it down</li>
+        <li>Low-latency software that closes the loop between array and game</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Method</h4>
+      <ol>
+        <li>Encode the ball’s position in the sensory area: <em>place coding</em> (which electrode fires tells the ball’s vertical position) combined with <em>rate coding</em> from 4 Hz to 40 Hz (how often it fires tells the distance to the paddle).</li>
+        <li>Read spikes from the two motor regions in real time and move the paddle accordingly.</li>
+        <li>If the paddle hits the ball, deliver <strong>predictable</strong> feedback: all electrodes at 100 Hz for 100 ms, then continue the game.</li>
+        <li>If it misses, deliver <strong>unpredictable</strong> feedback: random stimulation at 150 mV and 5 Hz for 4 seconds, then restart the ball on a random vector.</li>
+        <li>Repeat for 20-minute sessions and compare the first 5 minutes with the last 15.</li>
+      </ol>
+    </div>
+  </div>
+  <div class="recipe-foot"><b>Chef’s note</b>The motor regions are fixed in advance, while the cells are spread randomly over the chip. Any learning therefore has to come from the culture reorganising its own activity.</div>
+</div>
+
+<h2><span class="sec">1.4</span>Why “unpredictable” feedback?</h2>
+<p>The design comes from the <strong>free energy principle</strong>, which the paper summarises as the claim that “any self-organizing system separate from its environment seeks to minimize its variational free energy”. The gap between predictions and sensations “may be minimized in two ways: by optimizing probabilistic beliefs about the environment to make predictions more like sensations or by acting upon the environment to make sensations conform to its predictions” <cite k="dishbrain"></cite>. If that is true, the authors reason, a culture should learn to avoid whatever leads to unpredictable input. Hitting the ball leads to predictable input; missing leads to noise.</p>
+
+<p>For readers who want the quantity itself, here is the textbook definition of variational free energy that the theory refers to. It is a standard identity, not an equation from the paper. Hidden states are \(s\), observations \(o\), the system’s internal belief \(q(s)\) and its generative model \(p(o,s)\):</p>
+\[ F[q] \;=\; \mathbb{E}_{q(s)}\big[\log q(s) - \log p(o, s)\big] \;=\; D_{\mathrm{KL}}\big(q(s)\,\|\,p(s\mid o)\big) \;-\; \log p(o) \;\;\ge\;\; -\log p(o). \]
+<p class="eq-note">Because the KL term is never negative, free energy upper-bounds surprise, \(-\log p(o)\). The paper uses the information entropy of neural responses as a proxy for average surprise, “which is upper-bounded by VFE”, and predicts entropy should drop during gameplay and rise after random feedback.</p>
+
+<h2><span class="sec">1.5</span>What happened</h2>
+<p>Across 399 test sessions, the authors compared the cultures with three controls:</p>
+<ul>
+<li>media-only arrays with no cells (CTL);</li>
+<li>rest sessions, where active cultures controlled the paddle but got no sensory information (RST);</li>
+<li>in-silico runs driven by random noise (IS).</li>
+</ul>
+<p>Only the mouse and human cultures improved over time. Rally length went up for MCCs (\(t = 6.15,\; p = 5.27\times10^{-8}\)) and for HCCs (\(t = 10.44,\; p = 3.92\times10^{-19}\)). Both groups also missed the first serve (“aces”) less often and made more long rallies of more than three hits. Human cultures started worse than every control in the first five minutes, then overtook them <cite k="dishbrain"></cite>.</p>
+
+<fig k="db-5"></fig>
+
+<p>Two checks rule out the obvious alternative explanations. Non-neural HEK293T cells and media-only controls showed no learning. Paddle movement alone did not explain rally length: the in-silico control moved the paddle the most and still performed no better than the other controls.</p>
+
+<h2><span class="sec">1.6</span>The key ingredient is feedback</h2>
+<p>The most useful experiment for anyone thinking about continual learning is the feedback comparison: 486 sessions over three days and three conditions <cite k="dishbrain"></cite>.</p>
+<ul>
+<li><strong>Stimulus</strong>: the standard predictable and unpredictable feedback.</li>
+<li><strong>Silent</strong>: after a miss, all stimulation was withheld for the same duration, then the game restarted.</li>
+<li><strong>No feedback</strong>: after a miss the ball simply bounced on, with no change in stimulation at all.</li>
+</ul>
+
+<fig k="db-6"></fig>
+
+<p>Only the Stimulus condition improved significantly over time (\(t = 7.48,\; p = 1.58\times10^{-12}\)). Silent feedback did better than no feedback, but less than Stimulus. The authors’ conclusion is direct: “information alone is insufficient; feedback is required to form a closed-loop learning system” <cite k="dishbrain"></cite>.</p>
+
+<p>The electrophysiology tells the same story from inside the culture. During gameplay, sensory and motor regions were more strongly correlated than at rest. “Mutually exclusive” events, where one motor region fired and the other did not, became more frequent (\(t = 14.64,\; p = 5.68\times10^{-48}\)). The correlation between the two motor regions fell over the first five minutes of play and then levelled off.</p>
+
+<fig k="db-7"></fig>
+
+<div class="caveat"><b>The authors’ own limits</b>The sensory stimulation is very coarse. A monolayer of cells has far fewer connections than any 3D brain. “While within-session learning was well established, between-session learning over multiple days was not robustly observed. Cultures appeared to relearn associations with each new session”, which the authors say is expected for cortical cells, since cortex is not specialised for long-term memory. They also note that the word “sentience” is used in the formal sense of being “responsive to sensory impressions” <cite k="dishbrain"></cite>.</div>
+
+<h2><span class="sec">1.7</span>From Pong to Doom</h2>
+<p>A newer community project, <strong>doom-neuron</strong>, uses Cortical Labs’ CL1 platform to let living neurons control an agent in Doom <cite k="doom"></cite>. The problem is much harder than Pong: a 320×240 screen instead of a ball position, and a hybrid action space for movement and shooting. So the repository adds learned machinery around the cells, and its README is candid about the obvious question: is the machinery doing all the learning?</p>
+
+<div class="recipe">
+  <div class="recipe-head"><h3>Neurons that play Doom</h3><span>Recipe 1.2 · doom-neuron README</span></div>
+  <div class="recipe-body">
+    <div>
+      <h4>You will need</h4>
+      <ul>
+        <li>A CL1 neural culture reachable over the network</li>
+        <li>VizDoom scenarios: progressive deathmatch (default), survival, and a five-level “deadly corridor” curriculum</li>
+        <li>An encoder (a light CNN, 16 channels) that outputs stimulation commands</li>
+        <li>A linear decoder from spikes to actions, with zero bias</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Method</h4>
+      <ol>
+        <li>The encoder reads the screen (plus ray-cast wall features) and chooses a stimulation pattern: frequency, amplitude, pulses and which channels to stimulate.</li>
+        <li>The stimulation is sent to the CL1. The training side waits 50 ms for stimulation artifacts to fade, then collects spikes over a 50 ms window.</li>
+        <li>A linear readout turns spike counts into an action. A running per-channel baseline is subtracted first, so random firing cannot act as a hidden bias.</li>
+        <li>Game reward is turned back into electrical feedback (amplitude 2.0 by default), so the cells receive consequences.</li>
+        <li>The encoder is trained with PPO. Spikes cannot be differentiated through, so its sampled stimulation log-probabilities go into the policy-gradient objective.</li>
+      </ol>
+    </div>
+  </div>
+  <div class="recipe-foot"><b>Defaults</b>learning rate \(3\times10^{-4}\), \(\gamma = 0.99\), GAE \(\lambda = 0.95\), clip \(\epsilon = 0.2\), entropy coefficient 0.02, 2,048 steps per update, batch 256, 4 epochs.</div>
+</div>
+
+<p>Step 5 is the important trick. Because the neurons sit between the encoder and the reward, there is no gradient to backpropagate. The README says the encoder is trained “using the log-likelihood trick (REINFORCE-style), i.e., by including the encoder’s sampled stimulation log-probs in the PPO objective rather than backpropagating through spikes” <cite k="doom"></cite>. In symbols, with \(u\) a sampled stimulation, \(o\) an observation and \(\hat A\) an advantage estimate, the score-function gradient is</p>
+\[ \nabla_\phi J \;=\; \mathbb{E}\big[\,\hat A \;\nabla_\phi \log \pi_\phi(u \mid o)\,\big], \]
+<p>and PPO optimises its usual clipped surrogate (the standard objective of Schulman et al., not written out in the README), with ratio \(r_t = \pi_\phi(u_t\mid o_t)/\pi_{\phi_\text{old}}(u_t\mid o_t)\):</p>
+\[ L^{\text{CLIP}}(\phi) \;=\; \mathbb{E}_t\Big[\min\big(r_t\,\hat A_t,\; \operatorname{clip}(r_t,\,1-\epsilon,\,1+\epsilon)\,\hat A_t\big)\Big]. \]
+
+<p>On whether the cells actually learn, the README answers with ablations. With random spikes or zero spikes in place of the CL1’s output, learning disappears. With the encoder weights frozen at test time, reward still improved, because “biological neurons have an internal state (membrane potential, synaptic weights, adaptation currents). The same stimulation delivered at different points in training will produce different spike patterns” <cite k="doom"></cite>.</p>
+<div class="caveat"><b>Read with care</b>This is a code repository, not a peer-reviewed paper, and the README itself flags several settings, such as same-frame encoding, as “experimental” and “not yet ablation-tested”. Treat its claims as an engineering report worth reproducing.</div>
+
+<div class="takeaways"><h4>What to take from this chapter</h4><ol>
+<li>Biological learning happens in time, inside a loop where the learner’s own actions shape what it experiences next.</li>
+<li>Information is not enough. DishBrain cultures given the ball’s position but no consequences did not learn.</li>
+<li>Even in a dish, learning within a session was easy and keeping it across sessions was not. That is continual learning’s central problem in miniature.</li>
+</ol></div>

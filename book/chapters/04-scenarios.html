@@ -1,0 +1,73 @@
+<!-- {"id":"scenarios","part":"Part I · The problem","n":3,"title":"Three types of incremental learning","dek":"Before comparing recipes, agree on the dish. A method can look perfect or useless depending on one question: does the model know which task it is doing?","sources":["threetypes","episode"]} -->
+<p class="lede">By 2019 there were dozens of continual learning methods, and many claimed to be state of the art on the same datasets. Gido van de Ven, Tinne Tuytelaars and Andreas Tolias noticed why: “Because of an abundance of subtle, but often important, differences between evaluation protocols, systematic comparison between continual learning algorithms is challenging, even when papers use the same datasets. It is therefore not surprising that numerous continual learning methods claim to be state-of-the-art” <cite k="threetypes"></cite>. Their fix is a vocabulary that every later paper in this book uses. In the episode it is “three flavors of incremental learning”, at 17:30 <cite k="episode"></cite>.</p>
+
+<h2><span class="sec">3.1</span>The three scenarios, informally</h2>
+<blockquote><p>“(a) in task-incremental learning, an algorithm must incrementally learn a set of clearly distinguishable tasks; (b) in domain-incremental learning, an algorithm must learn the same kind of problem but in different contexts; and (c) in class-incremental learning, an algorithm must incrementally learn to distinguish between a growing number of objects or classes.”</p><footer>van de Ven, Tuytelaars & Tolias 2022</footer></blockquote>
+
+<p>Real-world examples from the paper make them concrete:</p>
+<ul>
+<li><strong>Task-incremental</strong>: learning different sports or musical instruments, where “it is always clear which sport or instrument should be played”.</li>
+<li><strong>Domain-incremental</strong>: recognising objects under changing lighting, or driving in different weather.</li>
+<li><strong>Class-incremental</strong>: “an agent might first learn about cats and dogs, and later about cows and horses”, and must later tell a cat from a cow even though it never saw them together <cite k="threetypes"></cite>.</li>
+</ul>
+
+<h2><span class="sec">3.2</span>The formal definition</h2>
+<p>The paper switches from the word “task” to <strong>context</strong>, because “task” is used with too many meanings. Each sample has three parts: an input \(x\in\mathcal{X}\), a within-context label \(y\in\mathcal{Y}\), and a context label \(c\in\mathcal{C}\). The scenario is decided by the shape of the function the model must learn (Table 1 of the paper):</p>
+
+<div class="tbl"><div class="tbl-scroll"><table>
+<thead><tr><th>Scenario</th><th class="l">Intuitive description</th><th>Mapping to learn</th></tr></thead>
+<tbody>
+<tr><th>Task-incremental</th><td class="l">Sequentially learn to solve a number of distinct tasks</td><td>\(f: \mathcal{X}\times\mathcal{C}\to\mathcal{Y}\)</td></tr>
+<tr><th>Domain-incremental</th><td class="l">Learn to solve the same problem in different contexts</td><td>\(f: \mathcal{X}\to\mathcal{Y}\)</td></tr>
+<tr><th>Class-incremental</th><td class="l">Discriminate between incrementally observed classes</td><td>\(f: \mathcal{X}\to\mathcal{C}\times\mathcal{Y}\)</td></tr>
+</tbody></table></div>
+<p class="tbl-cap"><b>Table 3.1</b> Overview of the three continual learning scenarios. Table 1 of van de Ven et al. 2022. \(\mathcal{X}\) is the input space, \(\mathcal{Y}\) the within-context output space and \(\mathcal{C}\) the context space. For class-incremental learning the mapping can also be written \(f:\mathcal{X}\to\mathcal{G}\), with \(\mathcal{G}\) the global label space obtained by combining \(\mathcal{C}\) and \(\mathcal{Y}\).</p></div>
+
+<p>Read the three signatures carefully. In task-incremental learning the context \(c\) is an <em>input</em>: the model is told which task it is on. In domain-incremental learning \(c\) appears nowhere: the model is not told, and does not need to know. In class-incremental learning \(c\) is part of the <em>output</em>: the model must work it out. That gives a simple decision tree.</p>
+
+<fig k="tt-1"></fig>
+
+<p>The paper is careful about one subtlety. Each scenario specifies what is known at <em>test</em> time. With domain-incremental learning, “it is good practice to explicitly state whether context labels (or context boundaries) are provided during training” <cite k="threetypes"></cite>.</p>
+
+<h2><span class="sec">3.3</span>One dataset, three dishes</h2>
+<p>Split MNIST cuts the ten digits into five contexts of two digits each. The same data becomes three different problems depending on what is asked at test time.</p>
+
+<fig k="tt-2"></fig>
+
+<p>The paper points out that “same class” depends on the scenario. In domain-incremental Split MNIST, “the digits ‘0’ and ‘2’ belong to the same class (as they are both even digits), but with class-incremental learning they are considered different classes” <cite k="threetypes"></cite>.</p>
+
+<h2><span class="sec">3.4</span>Why each scenario is hard in its own way</h2>
+<ul>
+<li><strong>Task-incremental</strong> can be solved with no forgetting at all: give each task its own network. So “the challenge with task-incremental learning, therefore, is not—or should not be—to simply prevent catastrophic forgetting, but rather to find effective ways to share learned representations across tasks” and to get positive transfer.</li>
+<li><strong>Domain-incremental</strong> cannot use task-specific parts unless the model first works out the task, so “Preventing forgetting ‘by design’ is therefore not possible” here.</li>
+<li><strong>Class-incremental</strong> has the hardest core problem: “learning to discriminate between classes that are not observed together, which has turned out to be very challenging for deep neural networks, especially when storing examples of previously seen classes is not allowed” <cite k="threetypes"></cite>.</li>
+</ul>
+
+<h2><span class="sec">3.5</span>Beyond neat task boundaries</h2>
+<p>Real data rarely arrives in clean blocks. The paper generalises the scenarios by separating two ideas:</p>
+<ul>
+<li>the <strong>context set</strong> \(\{\mathcal{D}_c\}_{c\in\mathcal{C}}\): the underlying distributions data can come from;</li>
+<li>the <strong>data stream</strong> \(e_1, e_2, \dots\): the experiences actually shown to the learner. At each step it “has free access to the data of the current experience, but not to the data from past or future experiences”.</li>
+</ul>
+<p>Every observation \(i\) of experience \(t\) is drawn from a mixture of contexts (Eq. 1 of the paper):</p>
+\[ e_t[i] \;\sim\; \sum_{c\in\mathcal{C}} p^{\,t,i}_c\, \mathcal{D}_c . \]
+<p class="eq-note">The context set says <em>what</em> can change over time. The probabilities \(p^{t,i}_c\) say <em>how</em> it changes: abrupt switches, gradual drift, or contexts that come back.</p>
+<p>This covers gradual transitions and revisited contexts, the so-called “task-free” setting. For messy real problems, “a multidimensional context space \(\mathcal{C}\) can be used, whereby each dimension could adhere to a different scenario”. Contexts can also be continuous, in which case the sum becomes an integral, as with Rotated MNIST at arbitrary angles <cite k="threetypes"></cite>.</p>
+
+<h2><span class="sec">3.6</span>The output layer decides the scenario in practice</h2>
+<p>In the experiments, the scenario is implemented by which output units are “active”. The probability the network with parameters \(\theta\) gives to class \(o\) is a softmax over active units only (Eq. 2 of the paper):</p>
+\[ p_\theta(o\mid x) \;=\; \begin{cases} \dfrac{e^{z_o(x,\theta)}}{\sum_j e^{z_j(x,\theta)}} & \text{if output unit } o \text{ is active},\\[6pt] 0 & \text{otherwise.}\end{cases} \]
+<ul>
+<li><strong>Task-incremental</strong>: “multi-headed”. Only the current context’s units are active.</li>
+<li><strong>Domain-incremental</strong>: one shared head, with 2 units for Split MNIST.</li>
+<li><strong>Class-incremental</strong>: one head with a unit per class, 10 for Split MNIST, all always active.</li>
+</ul>
+<p>The training loss is the usual cross-entropy, \(\mathcal{L}_C(x,o;\theta) = -\log p_\theta(o\mid x)\) (Eq. 3).</p>
+
+<div class="note"><b>Why this matters for the rest of the book</b>When you meet a result later, first ask which scenario it is in. EWC in Chapter 2 was tested on permuted MNIST, which is domain-incremental. ACL in Chapter 5 reports domain- and class-incremental Split-MNIST separately. CL-Bench in Chapter 11 even reports its own stability/plasticity split. A number without its scenario is not comparable to anything.</div>
+
+<div class="takeaways"><h4>What to take from this chapter</h4><ol>
+<li>The scenario is defined by what is known at test time: told the task (Task-IL), not told and not needed (Domain-IL), or not told and must infer it (Class-IL).</li>
+<li>Formally: \(\mathcal{X}\times\mathcal{C}\to\mathcal{Y}\), \(\mathcal{X}\to\mathcal{Y}\), \(\mathcal{X}\to\mathcal{C}\times\mathcal{Y}\).</li>
+<li>Class-incremental learning is hard because it needs comparisons between classes that were never seen together.</li>
+</ol></div>

@@ -1,0 +1,119 @@
+<!-- {"id":"forgetting","part":"Part I · The problem","n":2,"title":"Catastrophic forgetting and Elastic Weight Consolidation","dek":"Train a network on task A, then on task B, and it forgets A. EWC slows learning on the weights that A needs, and you can derive it from Bayes’ rule in four lines.","sources":["ewc","episode"]} -->
+<p class="lede">The problem has a name from the late 1980s: catastrophic forgetting. Kirkpatrick and colleagues describe it as “the tendency for knowledge of previously learnt task(s) (e.g. task A) to be abruptly lost as information relevant to the current task (e.g. task B) is incorporated”, and they say exactly when it happens: “specifically when the network is trained sequentially on multiple tasks because the weights in the network that are important for task A are changed to meet the objectives of task B” <cite k="ewc"></cite>.</p>
+
+<p>Most deep learning avoids the problem by never facing it. Data from all tasks is shuffled together and trained at once (multitask learning). If tasks arrive one after another, you could store everything and replay it, but the authors point out that this “would require the amount of memories being stored and replayed to be proportional to the number of tasks” <cite k="ewc"></cite>. The episode covers this family of fixes at 36:10 under “regularization” <cite k="episode"></cite>. EWC is its best-known member.</p>
+
+<h2><span class="sec">2.1</span>An idea borrowed from the brain</h2>
+<p>The paper starts from neuroscience. When a mouse learns a new skill, some excitatory synapses grow stronger, visible as larger dendritic spines, and “these enlarged dendritic spines persist despite the subsequent learning of other tasks, accounting for retention of performance several months later”. Erase those spines and the skill goes. The authors read this as evidence for <em>task-specific synaptic consolidation</em>: knowledge “durably encoded in a proportion of synapses that are rendered less plastic” <cite k="ewc"></cite>. EWC is the artificial version: make some weights less plastic, and choose which ones by how much the old task needs them.</p>
+
+<fig k="ewc-1"></fig>
+
+<p>Figure 2.1 is the whole idea in one picture. Large networks have many good solutions. Over-parameterisation makes it likely “that there is a solution for task B, \(\theta^*_B\), that is close to the previously found solution for task A, \(\theta^*_A\)”. So instead of walking straight to B’s minimum (blue), EWC keeps the weights inside the region that is still good for A. It does this with a quadratic penalty that acts “as a spring anchoring the parameters to the previous solution, hence the name elastic”. The spring is stiffer for the weights that matter more <cite k="ewc"></cite>.</p>
+
+<h2><span class="sec">2.2</span>The derivation</h2>
+<p>Treat training as finding the most probable parameters \(\theta\) given data \(\mathcal{D}\). Bayes’ rule, in log form (Eq. 1 of the paper):</p>
+\[ \log p(\theta \mid \mathcal{D}) \;=\; \log p(\mathcal{D}\mid\theta) \;+\; \log p(\theta) \;-\; \log p(\mathcal{D}). \]
+<p>The log-likelihood \(\log p(\mathcal{D}\mid\theta)\) is just the negative loss, \(-\mathcal{L}(\theta)\). Now split the data into two independent parts, task A’s data \(\mathcal{D}_A\) and task B’s data \(\mathcal{D}_B\). Applying Bayes’ rule twice gives Eq. 2:</p>
+\[ \log p(\theta \mid \mathcal{D}) \;=\; \log p(\mathcal{D}_B\mid\theta) \;+\; \underbrace{\log p(\theta \mid \mathcal{D}_A)}_{\text{everything we know about A}} \;-\; \log p(\mathcal{D}_B). \]
+<p>The left side is still the posterior given <em>all</em> the data, but the right side only needs B’s loss plus the posterior after A. In the paper’s words, “All the information about task A must therefore have been absorbed into the posterior distribution \(p(\theta\mid\mathcal{D}_A)\)” <cite k="ewc"></cite>. If we could carry that posterior forward, we would never need A’s data again.</p>
+
+<p>The true posterior is intractable, so EWC uses a <strong>Laplace approximation</strong> (following MacKay): a Gaussian centred at the solution \(\theta^*_A\), whose precision is the curvature of the loss there. Expanding to second order around \(\theta^*_A\), where the gradient is zero:</p>
+\[ \log p(\theta\mid\mathcal{D}_A) \;\approx\; \text{const} \;-\; \tfrac12\,(\theta-\theta^*_A)^{\top}\,H_A\,(\theta-\theta^*_A), \qquad H_A \approx F_A . \]
+<p>The Hessian \(H_A\) is replaced by the <strong>Fisher information matrix</strong> \(F\), and only its diagonal is kept. The paper lists why \(F\) is a good choice: “(a) it is equivalent to the second derivative of the loss near a minimum, (b) it can be computed from first-order derivatives alone and is thus easy to calculate even for large models, and (c) it is guaranteed to be positive semi-definite” <cite k="ewc"></cite>. The diagonal entry for parameter \(i\) is the expected squared gradient of the log-likelihood:</p>
+\[ F_i \;=\; \mathbb{E}_{x\sim\mathcal{D}_A,\; y\sim p_\theta(y\mid x)}\!\left[\left(\frac{\partial \log p_\theta(y\mid x)}{\partial \theta_i}\right)^{\!2}\right]_{\theta=\theta^*_A}. \]
+<p>Substitute the Gaussian into Eq. 2, drop constants, and flip the sign to get a loss. That gives the EWC objective, Eq. 3 of the paper:</p>
+\[ \boxed{\;\mathcal{L}(\theta) \;=\; \mathcal{L}_B(\theta) \;+\; \sum_i \frac{\lambda}{2}\, F_i\,\big(\theta_i - \theta^*_{A,i}\big)^2\;} \]
+<p class="eq-note">\(\mathcal{L}_B\) is the loss for task B only. \(\theta^*_{A,i}\) is weight \(i\) after task A. \(F_i\) is its importance. \(\lambda\) “sets how important the old task is compared to the new one” <cite k="ewc"></cite>.</p>
+
+<p>For a third task C, EWC keeps the parameters close to both earlier solutions. This “can be enforced either with two separate penalties, or as one by noting that the sum of two quadratic penalties is itself a quadratic penalty” <cite k="ewc"></cite>. Concretely, for tasks \(k = 1,\dots,K-1\) already learned:</p>
+\[ \mathcal{L}(\theta) \;=\; \mathcal{L}_K(\theta) \;+\; \sum_{k=1}^{K-1}\sum_i \frac{\lambda}{2}\,F^{(k)}_i\big(\theta_i - \theta^{*}_{k,i}\big)^2 . \]
+
+<div class="recipe">
+  <div class="recipe-head"><h3>Elastic Weight Consolidation</h3><span>Recipe 2.1 · Kirkpatrick et al. 2017</span></div>
+  <div class="recipe-body">
+    <div>
+      <h4>You will need</h4>
+      <ul>
+        <li>A network trained on task A, with weights \(\theta^*_A\)</li>
+        <li>Some samples of A’s inputs to estimate the Fisher, used once after A finishes</li>
+        <li>One extra number per weight, \(F_i\), plus the anchor \(\theta^*_{A,i}\)</li>
+        <li>A strength \(\lambda\), chosen by hyperparameter search</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Method</h4>
+      <ol>
+        <li>Train on task A normally until it is learned.</li>
+        <li>Freeze a copy of the weights as the anchor \(\theta^*_A\).</li>
+        <li>Estimate \(F_i\): average the squared gradient of \(\log p_\theta(y\mid x)\) over A’s inputs, with labels sampled from the model.</li>
+        <li>Train on task B with the loss \(\mathcal{L}_B + \sum_i \tfrac{\lambda}{2}F_i(\theta_i-\theta^*_{A,i})^2\).</li>
+        <li>At each new task boundary, add another anchor-and-Fisher term (or merge them into one quadratic).</li>
+      </ol>
+    </div>
+  </div>
+  <div class="recipe-foot"><b>Cost</b>“EWC has a run time which is linear in both the number of parameters and the number of training examples” <cite k="ewc"></cite>. Memory is two extra numbers per weight per stored penalty.</div>
+</div>
+
+<h2><span class="sec">2.3</span>First test: permuted MNIST</h2>
+<p>Each task is MNIST with the pixels shuffled by a fixed random permutation: “Each task was thus of equal difficulty to the original MNIST problem, though a different solution would be required for each.” The network is trained on a task, then never sees that task’s data again <cite k="ewc"></cite>.</p>
+
+<fig k="ewc-2"></fig>
+
+<p>Panel A shows three behaviours:</p>
+<ul>
+<li><strong>Plain SGD</strong> (blue) forgets A as soon as B begins, and the forgetting “compounds further with more training time, and the addition of subsequent tasks”.</li>
+<li><strong>A uniform \(L_2\) penalty</strong> (green) protects A, but “task B cannot be learned properly as the constraint protects all weights equally, leaving little spare capacity”.</li>
+<li><strong>EWC</strong> (red) learns B without forgetting A.</li>
+</ul>
+<p>Panel B shows that the best SGD-with-dropout setup did not scale to more tasks, while “EWC allows a large number of tasks to be learned in sequence, with only modest growth in the error rates” <cite k="ewc"></cite>.</p>
+
+<p>Panel C answers a deeper question: does EWC carve the network into separate pieces per task, or do tasks share weights? The authors measure the overlap between two tasks’ Fisher matrices. Each is normalised to unit trace, and the overlap is defined as \(1 - d^2\) using the Fréchet distance:</p>
+\[ d^2\big(\hat F_1, \hat F_2\big) \;=\; \tfrac12\,\mathrm{tr}\!\left(\hat F_1 + \hat F_2 - 2\,(\hat F_1 \hat F_2)^{1/2}\right) \;=\; \tfrac12\,\big\|\hat F_1^{1/2} - \hat F_2^{1/2}\big\|_F , \]
+<p class="eq-note">\(d^2\) is between 0 and 1. An overlap of 1 means \(F_1 = \alpha F_2\): the two tasks lean on the same weights.</p>
+<p>Similar tasks (only an 8×8 patch permuted) share weights throughout the network. Very different tasks (a 26×26 patch permuted) use separate weights in early layers. But “even for the large permutations, the layers of the network closer to the output are indeed being reused for both tasks”, because the inputs differ while the output classes are shared <cite k="ewc"></cite>.</p>
+
+<div class="tbl"><div class="tbl-scroll"><table>
+<thead><tr><th>Hyperparameter</th><th>Fig. 2A</th><th>Fig. 2B</th><th>Fig. 2C</th></tr></thead>
+<tbody>
+<tr><th>learning rate</th><td>\(10^{-3}\)</td><td>\(10^{-5}\)–\(10^{-3}\)</td><td>\(10^{-3}\)</td></tr>
+<tr><th>dropout</th><td>no</td><td>yes</td><td>no</td></tr>
+<tr><th>early stopping</th><td>no</td><td>yes</td><td>no</td></tr>
+<tr><th>number of hidden layers</th><td>2</td><td>2</td><td>6</td></tr>
+<tr><th>width of hidden layers</th><td>400</td><td>400–2000</td><td>100</td></tr>
+<tr><th>epochs per dataset</th><td>20</td><td>100</td><td>100</td></tr>
+</tbody></table></div>
+<p class="tbl-cap"><b>Table 2.1</b> Hyperparameters for the MNIST experiments, transcribed from the supplementary table of Kirkpatrick et al. Fully connected ReLU networks. Where a range is given, it was searched randomly over 50 combinations.</p></div>
+
+<h2><span class="sec">2.4</span>Second test: ten Atari games</h2>
+<p>Reinforcement learning is harder: no labelled dataset, and games return unpredictably. Each run used ten games chosen at random from 19 that a standard DQN plays at human level. The agent played them in long segments, in random order, often returning to the same game several times <cite k="ewc"></cite>.</p>
+
+<p>The agent had two additions besides EWC. First, small <strong>task-specific gains and biases</strong> in every layer, so each game gets its own adjustment while the main weights are shared:</p>
+\[ y_i \;=\; \Big(\textstyle\sum_j W_{ij}\,x_j \;+\; b^{c}_i\Big)\,g^{c}_i , \]
+<p class="eq-note">\(c\) is the current task (context). \(b^c\) and \(g^c\) are initialised to 0 and 1.</p>
+<p>Second, a <strong>task-recognition model</strong>, because nobody tells the agent which game it is playing. The current task is a hidden variable of a Hidden Markov Model with switch probability \(\alpha\):</p>
+\[ p(c, t+1) = \sum_{c'} p(c', t)\,\Gamma(c, c'), \qquad \Gamma(c, c') = \delta(c, c')(1-\alpha) + \big(1-\delta(c,c')\big)\,\alpha , \]
+\[ p(c \mid o_1 \dots o_t) \;\propto\; \sum_{c'} \Gamma(c, c')\, p(c', t-1)\, p(o\mid c, t). \]
+<p class="eq-note">Each task has a generative model of the screen, a Dirichlet-multinomial over pixels. A spare, untrained model is always kept. If it explains recent frames best, a new task is created. This is the “Forget Me Not” process, run with a decaying switch rate \(\alpha = 1/t\).</p>
+
+<p>The Fisher was computed at each task switch from 100 minibatches of the replay buffer, scaled by a multiplier of 400. EWC protection began only after a game had been played for 20 million frames <cite k="ewc"></cite>.</p>
+
+<fig k="ewc-3"></fig>
+
+<p>Without EWC, “the agent never learns to play more than one game and the harm inflicted by forgetting the old games means that the total human-normalized score remains below one”. With EWC, the agent learns several games. Giving it the true task labels (brown curve) improved things “only modest[ly]” over inferring them <cite k="ewc"></cite>.</p>
+
+<h2><span class="sec">2.5</span>Chef’s notes: where EWC is weak</h2>
+<p>Panel C of Figure 2.3 is the authors’ honest look at their own approximation. They perturbed a trained Breakout agent’s weights in three ways:</p>
+<ul>
+<li>uniformly, which hurt;</li>
+<li>along directions EWC would allow, the inverse Fisher \((F+\lambda I)^{-1}\), which hurt less, so the Fisher does identify important weights;</li>
+<li>in the Fisher’s null space, directions EWC thinks the network ignores completely.</li>
+</ul>
+<p>The third kind “has the same effect as perturbing in the inverse Fisher space”:</p>
+<blockquote><p>“This suggests that we are over-confident about certain parameters being unimportant: it is therefore likely that the chief limitation of the current implementation is that it under-estimates parameter uncertainty.”</p><footer>Kirkpatrick et al. 2017</footer></blockquote>
+<div class="caveat"><b>Limits stated in the paper</b>The posterior is approximated “by a factorized Gaussian” with variance from a point estimate, which “does constitute a significant weakness”. EWC on Atari “does not reach the score that would have been obtained by training ten separate DQNs”. The authors suggest Bayesian neural networks as a possible improvement. Chapter 4 adds a bigger limit found later: EWC fails completely when the model must tell apart classes from different tasks.</div>
+
+<div class="takeaways"><h4>What to take from this chapter</h4><ol>
+<li>Forgetting is not a malfunction. The loss for task B never mentions task A, so gradient descent is free to overwrite A.</li>
+<li>Bayes’ rule says the posterior after A is everything you need to remember A. EWC keeps a cheap Gaussian sketch of it: an anchor and a per-weight stiffness \(F_i\).</li>
+<li>Importance-weighted springs beat uniform springs. The weak point is that the diagonal, local approximation is too sure about which weights do not matter.</li>
+</ol></div>

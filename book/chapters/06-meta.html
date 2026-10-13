@@ -1,0 +1,159 @@
+<!-- {"id":"meta","part":"Part II · Classic recipes","n":5,"title":"Incentive and practice","dek":"If you want a network to remember, put remembering in its objective and let it practise across thousands of episodes. Three papers show what happens when you do.","sources":["pip","mlc","acl","episode"]} -->
+<p class="lede">Chapter 4 ended with hand-designed fixes: penalties, buffers and templates. This chapter asks a different question. What if the network learned its own continual learning algorithm? The episode reaches this family at 38:00, “meta-learning methods” <cite k="episode"></cite>. Kazuki Irie and Brenden Lake give the clearest account of why it works.</p>
+
+<h2><span class="sec">5.1</span>The Problem of Incentive and Practice</h2>
+<p>For decades, critics have listed four things neural networks supposedly cannot do: generalize systematically, avoid catastrophic forgetting, learn from a few examples, and reason in several steps <cite k="pip"></cite>.</p>
+
+<fig k="il-1"></fig>
+
+<p>Irie and Lake argue that all four failures share one overlooked cause: “the target behaviour expected from the system is not sufficiently well-represented in the objective function that the network seeks to optimize”. They call this the <strong>Problem of Incentive and Practice</strong> (PIP). Continual learning is their first example:</p>
+<blockquote><p>“The ultimate goal of continual learning is to perform well on all the tasks after having seen all of them. However, the usual training objective considers performance on only the current task. Under this objective, the system, or its learning algorithm, is never incentivized to perform well on anything but the current task. From the system’s viewpoint, forgetting is entirely compatible with its specified objective of performing well on each task at a time.”</p><footer>Irie & Lake 2025</footer></blockquote>
+<p>Hand-crafted fixes such as EWC “are indirect or ineffective translations of the desired objective”. A penalty that preserves old weights “may eventually lead to reduced forgetting, but it does not directly optimize for reduced forgetting” <cite k="pip"></cite>.</p>
+
+<fig k="il-2"></fig>
+
+<h3>The meta-learning recipe in general form</h3>
+<p>A meta-training episode has three parts: a demonstration sequence \(\mathbb{S}^\text{demo} = \big(\mathbf{x}^\text{demo}_n, \mathbf{y}^\text{demo}_n\big)_{n=1}^{N^\text{demo}}\), query inputs \(\mathbb{X}^\text{query}\), and target behaviour \(\mathbb{Y}^\text{target}\). A sequence-processing network with parameters \(\theta\) reads the demonstrations and the query together, and is trained to</p>
+\[ \max_\theta\; \mathbb{E}_{\text{episodes}}\Big[\log p_\theta\big(\mathbb{Y}^\text{target}\,\big|\,\mathbb{S}^\text{demo},\, \mathbb{X}^\text{query}\big)\Big]. \]
+<p>“To address PIP, this meta-objective provides an explicit incentive to the system to improve on the target behaviour, and meta-training across a set of many episodes provide it with opportunities to practice improving on its weaknesses” <cite k="pip"></cite>. The authors call such models Metalearning Sequence Learners. In large language models the same thing goes by another name: “in-context learning”.</p>
+
+<fig k="il-3"></fig>
+
+<h2><span class="sec">5.2</span>Systematic generalization: MLC</h2>
+<p>Lake and Baroni took on a 35-year-old challenge. In 1988 Fodor and Pylyshyn argued that neural networks lack systematic compositionality, “the algebraic ability to understand and produce novel combinations from known components”. Lake and Baroni answered “by providing evidence that neural networks can achieve human-like systematicity when optimized for their compositional skills” <cite k="mlc"></cite>.</p>
+
+<fig k="mlc-1"></fig>
+
+<p><strong>Meta-learning for compositionality (MLC)</strong> trains a standard encoder–decoder transformer on a stream of episodes. Each episode is a new mini-language generated from a random grammar. The crucial ingredient is that word meanings are reshuffled in every episode: if “jump” means one action in one episode, it means another in the next. The network therefore cannot memorise meanings in its weights. It has to learn how to learn them from the study examples <cite k="pip"></cite>.</p>
+
+<fig k="mlc-4"></fig>
+
+<h3>Head-to-head with people</h3>
+<p>Twenty-five people saw 14 study instructions in a made-up language (words like <em>dax</em>, <em>wif</em>, <em>lug</em>, <em>zup</em>, and functions like <em>fep</em>, <em>blicket</em>, <em>kiki</em>). They then had to produce coloured-circle outputs for 10 new instructions.</p>
+
+<fig k="mlc-2"></fig>
+
+<div class="tbl"><div class="tbl-scroll"><table>
+<thead><tr><th>Measure</th><th>People</th><th>MLC</th></tr></thead>
+<tbody>
+<tr><th>Responses matching the algebraic answer</th><td>80.7%</td><td>82.4%</td></tr>
+<tr><th>Correct on outputs longer than any seen in study</th><td>72.5%</td><td>77.8%</td></tr>
+<tr><th>Errors that are one-to-one translations</th><td>24.4%</td><td>56.3%</td></tr>
+<tr><th>Errors with iconic concatenation (function 3)</th><td>23.3%</td><td>13.8%</td></tr>
+</tbody></table></div>
+<p class="tbl-cap"><b>Table 5.1</b> Few-shot instruction learning, numbers transcribed from the text of Lake & Baroni 2023 (most systematic MLC run, sampling from the model). Chance is 2.8% for two-length outputs. MLC also predicted which items people found harder (Pearson \(r = 0.788,\; P = 0.031\)).</p></div>
+
+<div class="tbl"><div class="tbl-scroll"><table>
+<thead><tr><th>Model</th><th>Few-shot learning</th><th>Open-ended</th></tr></thead>
+<tbody>
+<tr><th>Baseline (uniform)</th><td>−1,926.5</td><td>−1,547.0</td></tr>
+<tr><th>Symbolic (oracle)</th><td>−538.8</td><td>–</td></tr>
+<tr><th>Symbolic (oracle/biases)</th><td>−357.2</td><td>−1,008.5</td></tr>
+<tr><th>Basic seq2seq</th><td>−1,264.7</td><td>–</td></tr>
+<tr><th>MLC (copy only)</th><td>−1,586.4</td><td>−1,341.4</td></tr>
+<tr><th>MLC (algebraic only)</th><td>−496.9</td><td>−1,218.3</td></tr>
+<tr><th>MLC (joint)</th><td class="best">−349.2</td><td class="best">−635.7</td></tr>
+<tr><th>MLC</th><td>−358.1</td><td>−693.1</td></tr>
+</tbody></table></div>
+<p class="tbl-cap"><b>Table 5.2</b> Log-likelihood of human behaviour as predicted by each model (higher is better). Table 1 of Lake & Baroni 2023. All models have fitted lapse rates.</p></div>
+
+<div class="tbl"><div class="tbl-scroll"><table>
+<thead><tr><th>Model</th><th>SCAN Simple</th><th>COGS Simple</th><th>SCAN Add jump</th><th>SCAN Around right</th><th>SCAN Opp. right</th><th>COGS Lexical</th></tr></thead>
+<tbody>
+<tr><th>Basic seq2seq</th><td>0.00%</td><td>0.12%</td><td class="worst">99.27%</td><td>51.13%</td><td class="worst">100.00%</td><td>6.08%</td></tr>
+<tr><th>MLC</th><td>0.02%</td><td>0.34%</td><td class="best">0.22%</td><td class="best">0.04%</td><td class="best">0.06%</td><td class="best">0.87%</td></tr>
+</tbody></table></div>
+<p class="tbl-cap"><b>Table 5.3</b> Exact-match error rates (lower is better) on systematic lexical generalization benchmarks, averaged over five runs. Table 2 of Lake & Baroni 2023. “Simple” splits are within-distribution.</p></div>
+
+<div class="caveat"><b>Where MLC stops</b>Surface-level permutations were not enough for the structural splits: “MLC fails to handle longer output sequences (SCAN length split) as well as novel and more complex sentence structures (three types in COGS), with error rates at 100%” <cite k="mlc"></cite>.</div>
+
+<h2><span class="sec">5.3</span>Continual learning: ACL</h2>
+<p>Irie, Csordás and Schmidhuber apply the same principle directly to forgetting. They open with a line from neuroscience writer David Eagleman: “Enemies of memories are other memories.” Their argument is that capacity is not usually the problem: the same networks that forget when trained in sequence “can perform well on both tasks when trained jointly”. Instead, “the real root cause of CF lies in the learning algorithm as a memory mechanism”, and conventional algorithms are not “aware” of the problem. So they let gradient descent search for a continual learning algorithm <cite k="acl"></cite>.</p>
+
+<fig k="acl-1"></fig>
+
+<h3>The learner: a self-referential weight matrix</h3>
+<p>The network is a “Recursive Self-Transformer”: a linear-Transformer in which each layer is a <strong>self-referential weight matrix (SRWM)</strong> that rewrites itself as it reads the sequence. At each step \(t\), the matrix \(\mathbf{W}_{t-1}\) reads input \(\mathbf{u}_t\) and produces an output, a key, a query and a learning rate (Eqs. 1–3 of the paper):</p>
+\[ [\mathbf{o}_t, \mathbf{k}_t, \mathbf{q}_t, \beta_t] \;=\; \mathbf{W}_{t-1}\,\mathbf{u}_t \]
+\[ \mathbf{v}_t = \mathbf{W}_{t-1}\,\phi(\mathbf{q}_t), \qquad \bar{\mathbf{v}}_t = \mathbf{W}_{t-1}\,\phi(\mathbf{k}_t) \]
+\[ \mathbf{W}_t \;=\; \mathbf{W}_{t-1} \;+\; \sigma(\beta_t)\,\big(\mathbf{v}_t - \bar{\mathbf{v}}_t\big)\otimes\phi(\mathbf{k}_t) \]
+<p class="eq-note">\(\sigma\) is the sigmoid and \(\phi\) the softmax. The last line is a rank-one <em>delta-rule</em> update, in which the self-generated \(\mathbf{v}_t\), \(\phi(\mathbf{k}_t)\) and \(\sigma(\beta_t)\) play the roles of target, input and learning rate. Only the initial matrix \(\mathbf{W}_0\) is trained by gradient descent. Everything after that is the network modifying itself.</p>
+<p>The state has a fixed size, so the model “does not automatically store data from previous tasks, it must metalearn what to store through incentives and practice” <cite k="pip"></cite>.</p>
+
+<h3>The objective: put remembering in the loss</h3>
+<p>Take two tasks A and B. Feed \(L\) examples of A, then \(L\) of B. Let \(\mathbf{W}_{\mathcal{A}}\) be the state after A, and \(\mathbf{W}_{\mathcal{A},\mathcal{B}}\) the state after both. The ACL loss (Eq. 4) is:</p>
+\[ \min_\theta \; -\Big(\log p\big(y^{\mathcal{A}}_\text{target}\mid \mathbf{x}^{\mathcal{A}}_\text{query};\, \mathbf{W}_{\mathcal{A}}(\theta)\big) \;+\; \log p\big(y^{\mathcal{B}}_\text{target}\mid \mathbf{x}^{\mathcal{B}}_\text{query};\, \mathbf{W}_{\mathcal{A},\mathcal{B}}(\theta)\big) \;+\; \underbrace{\log p\big(y^{\mathcal{A}}_\text{target}\mid \mathbf{x}^{\mathcal{A}}_\text{query};\, \mathbf{W}_{\mathcal{A},\mathcal{B}}(\theta)\big)}_{\text{backward transfer: still remember A after B}}\Big) \]
+<p>Each term has a job. The first rewards learning A as soon as A’s demonstrations arrive. The second rewards learning B, using what was learned from A (forward transfer). The third, the one ordinary meta-learning leaves out, rewards still answering A correctly after B: it “optimizes for backward transfer: (1) remembering the first task A after learning B (combatting catastrophic forgetting), and (2) leveraging learning of B to improve performance on the past task A” <cite k="acl"></cite>.</p>
+
+<div class="recipe">
+  <div class="recipe-head"><h3>Automated Continual Learning</h3><span>Recipe 5.1 · Irie, Csordás & Schmidhuber</span></div>
+  <div class="recipe-body">
+    <div>
+      <h4>You will need</h4>
+      <ul>
+        <li>Few-shot datasets to build meta-training episodes (Omniglot, Mini-ImageNet, FC100)</li>
+        <li>A vision backbone (Conv-4, with instance normalization instead of batch normalization) feeding SRWM layers</li>
+        <li>Memory-efficient backpropagation through time</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Method</h4>
+      <ol>
+        <li>Build an episode: pick a 5-way task A and a task B. Relabel classes randomly for this episode, and take 15 examples per class.</li>
+        <li>Feed A’s (image, label) pairs, then B’s, through the self-modifying network one pair at a time.</li>
+        <li>At each task boundary, ask query questions about <em>every task seen so far</em>.</li>
+        <li>Backpropagate the sum of all query losses into \(\mathbf{W}_0\).</li>
+        <li>At meta-test time, freeze \(\mathbf{W}_0\) and let the network learn new task sequences in context.</li>
+      </ol>
+    </div>
+  </div>
+  <div class="recipe-foot"><b>Chef’s note</b>No replay buffer and no regularizer. The learned algorithm lives entirely in \(\mathbf{W}_0\).</div>
+</div>
+
+<h3>In-context learners forget too</h3>
+<p>The first result is that ordinary in-context learners suffer the same disease as gradient descent. Without the backward-transfer term, accuracy on the first task falls to chance (about 20% for 5-way classification) after the second task is learned in context. The authors call this “in-context catastrophic forgetting” <cite k="acl"></cite>.</p>
+
+<div class="tbl"><div class="tbl-scroll"><table>
+<thead><tr><th>Meta-training (A / B)</th><th>ACL</th><th>A only: A</th><th>A→B: B</th><th>A→B: A</th><th>B only: B</th><th>B→A: A</th><th>B→A: B</th></tr></thead>
+<tbody>
+<tr><th>Omniglot / Mini-ImageNet</th><td>No</td><td>97.6 ± 0.2</td><td>52.8 ± 0.7</td><td class="worst">22.9 ± 0.7</td><td>52.1 ± 0.8</td><td>97.8 ± 0.3</td><td class="worst">20.4 ± 0.6</td></tr>
+<tr><th></th><td>Yes</td><td>98.3 ± 0.2</td><td>54.4 ± 0.8</td><td class="best">98.2 ± 0.2</td><td>54.8 ± 0.9</td><td>98.0 ± 0.3</td><td class="best">54.6 ± 1.0</td></tr>
+<tr><th>FC100 / Mini-ImageNet</th><td>No</td><td>49.7 ± 0.7</td><td>55.0 ± 1.0</td><td class="worst">21.3 ± 0.7</td><td>55.1 ± 0.6</td><td>49.9 ± 0.8</td><td class="worst">21.7 ± 0.8</td></tr>
+<tr><th></th><td>Yes</td><td>53.8 ± 1.7</td><td>52.5 ± 1.2</td><td class="best">46.2 ± 1.3</td><td>59.9 ± 0.7</td><td>45.5 ± 0.9</td><td class="best">53.0 ± 0.6</td></tr>
+</tbody></table></div>
+<p class="tbl-cap"><b>Table 5.4</b> 5-way accuracy (%) with 15 demonstrations per class. Table 1 of Irie et al. Column labels give the task order in context and then the task being queried. The highlighted columns query the <em>first</em> task after the second has been learned.</p></div>
+
+<fig k="acl-2"></fig>
+<p>Figure 5.6 shows <em>why</em>. When the backward term is left out, “the more the model metalearns, the more it tends to forget in-context”. Gradient descent “tends to find solutions/CL algorithms that prefer to erase previously learned knowledge”, because those are easier to find <cite k="acl"></cite>. Forgetting is the default even for learned learners, unless the objective forbids it.</p>
+
+<h3>Split-MNIST without replay</h3>
+<div class="tbl"><div class="tbl-scroll"><table>
+<thead><tr><th>Method</th><th>Domain-IL, 5-task</th><th>Class-IL, 2-task</th><th>Class-IL, 5-task</th></tr></thead>
+<tbody>
+<tr><th>Plain SGD</th><td>63.2 ± 0.4</td><td>48.8 ± 0.1</td><td>19.5 ± 0.1</td></tr>
+<tr><th>Adam</th><td>55.2 ± 1.4</td><td>49.7 ± 0.1</td><td>19.7 ± 0.1</td></tr>
+<tr><th>Adam + L2</th><td>66.0 ± 3.7</td><td>51.8 ± 1.9</td><td>22.5 ± 1.1</td></tr>
+<tr><th>EWC</th><td>58.9 ± 2.6</td><td>49.7 ± 0.1</td><td>19.8 ± 0.1</td></tr>
+<tr><th>Online EWC</th><td>57.3 ± 1.4</td><td>49.7 ± 0.1</td><td>19.8 ± 0.1</td></tr>
+<tr><th>Synaptic Intelligence</th><td>64.8 ± 3.1</td><td>49.4 ± 0.2</td><td>19.7 ± 0.1</td></tr>
+<tr><th>Memory Aware Synapses</th><td>68.6 ± 6.9</td><td>49.6 ± 0.1</td><td>19.5 ± 0.3</td></tr>
+<tr><th>Learning without Forgetting</th><td>71.0 ± 1.3</td><td>–</td><td>24.2 ± 0.3</td></tr>
+<tr><th>OML, out-of-the-box</th><td>69.9 ± 2.8</td><td>46.6 ± 7.2</td><td>24.9 ± 4.1</td></tr>
+<tr><th>OML + optimized meta-test iterations</th><td>73.6 ± 5.3</td><td>62.1 ± 7.9</td><td>34.2 ± 4.6</td></tr>
+<tr><th>GeMCL</th><td>63.8 ± 3.8</td><td>91.2 ± 2.8</td><td>79.0 ± 2.1</td></tr>
+<tr><th>ACL (out-of-the-box, 2-task model)</th><td>72.2 ± 0.9</td><td>71.5 ± 5.9</td><td>N.A.</td></tr>
+<tr><th>ACL + meta-finetuned, 5-task loss, Omniglot</th><td class="best">84.5 ± 1.6</td><td class="best">96.0 ± 1.0</td><td class="best">84.3 ± 1.2</td></tr>
+</tbody></table></div>
+<p class="tbl-cap"><b>Table 5.5</b> Split-MNIST accuracy (%), no method using replay memory. Table 3 of Irie et al. Mean ± std over 10 runs. Joint (non-continual) training reaches near 100%. Note how EWC and its relatives sit at chance in Class-IL, matching Chapter 4.</p></div>
+<p>“We are not aware of any existing hand-crafted CL algorithms that can achieve ACL’s performance without any replay memory” <cite k="acl"></cite>.</p>
+
+<div class="caveat"><b>The authors’ own limits</b>Against prompt-based methods built on a large pre-trained vision transformer (L2P at 83.9% and DualPrompt at 86.5% on the full Split-CIFAR100), ACL on top of a frozen ViT reached 68.3% even on a simplified 2-way, 5-task “mini” version, and 61.5% on mini 5-datasets. That shows “the necessity for further scaling”. Other limits they list: domain and length generalization, very long meta-training sequences for many classes, image classification only, and weight updates that are “very hard to interpret” <cite k="acl"></cite>. Irie and Lake add a general one: meta-learning “is inherently limited by ANNs’ out-of-distribution generalization abilities” <cite k="pip"></cite>.</div>
+
+<h2><span class="sec">5.4</span>The bridge to language models</h2>
+<p>Irie and Lake point out that language models already contain much of this recipe: “sequence prediction with feedback trained on diverse data”. For continual learning in particular, “it is conceivable that similar topics or tasks re-occur within the same context window, incentivizing the model to remember previous materials, which gives rise to in-context continual learning-like objectives” <cite k="pip"></cite>. The rest of this book is about language models, so it is worth remembering the warning from ACL: in-context learners also forget, unless something rewards them for remembering.</p>
+
+<div class="takeaways"><h4>What to take from this chapter</h4><ol>
+<li>Networks forget because nothing in the objective asks them to remember. Put remembering in the loss, and practise it over many episodes.</li>
+<li>MLC shows a plain transformer can match human systematic generalization when trained for it. Reshuffling word meanings each episode is what forces learning-to-learn.</li>
+<li>ACL’s backward-transfer term \(\log p(y^{\mathcal{A}}\mid \mathbf{x}^{\mathcal{A}}; \mathbf{W}_{\mathcal{A},\mathcal{B}})\) is the whole trick. Without it, in-context learners forget too.</li>
+</ol></div>

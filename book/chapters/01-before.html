@@ -1,0 +1,72 @@
+<!-- {"id":"before","part":"Front matter","n":"0","title":"Before you cook","dek":"What continual learning is, why everyone is talking about it, and how this book is put together.","sources":["episode","sdft","ttt","pip"]} -->
+<p class="lede">Every large model you have used was trained once, frozen, and shipped. After that it does not change. If the world changes, if you teach it something new in a conversation, if it fails at a task a hundred times, the weights stay exactly where they were.</p>
+
+<p>The authors of Self-Distillation Fine-Tuning open their paper with the same observation: today’s AI systems “remain static after deployment”, and while they can adapt at inference time through retrieval or prompting, “they do not update their parameters to acquire new skills, internalize new knowledge, or improve from experience” <cite k="sdft"></cite>. The TTT-Discover paper says it the other way round: “Most of today’s AI systems remain static after deployment, even though the world keeps changing. The high-level goal of continual learning is to enable AI systems to keep changing with the world, similar to how humans improve throughout their lives” <cite k="ttt"></cite>.</p>
+
+<p><strong>Continual learning</strong> is the study of how to close that gap: how to let a learning system take in a stream of experience, one piece after another, and keep improving, without destroying what it already knew. Irie and Lake give it the plainest definition in their glossary: “learning new tasks, one after another, in a sequential manner” <cite k="pip"></cite>.</p>
+
+<h2><span class="sec">0.1</span>The conversation this book follows</h2>
+
+<div class="credit">
+  <img src="figures/episode.jpg" width="1200" height="600" alt="Video thumbnail of the episode">
+  <div>
+    <span class="k">The menu this book follows</span>
+    <h3>What Continual Learning Actually Means feat. Ilija Lichkovski from Prime Intellect</h3>
+    <p>With <strong>Ilija Lichkovski</strong> (<strong>Prime Intellect</strong>), hosted by Yacine Mahdid on Learning with Yacine. Published 12 October 2026, about 1 h 30 min.</p>
+    <p><a href="https://www.yacinemahdid.com/p/what-continual-learning-actually" target="_blank" rel="noopener">yacinemahdid.com/p/what-continual-learning-actually ↗</a></p>
+  </div>
+</div>
+
+<p>The episode page opens with a line that explains why this book exists: continual learning “is one hell of a hot topic in 2026 and it’s beautiful because (like consciousness) barely anyone agree on what are we even talking about” <cite k="episode"></cite>. The reading list behind this book is the literature that conversation draws on. The chapters below follow the episode’s order, then go much deeper into each paper than a conversation can.</p>
+
+<p>The episode’s own chapter list, as published on its page:</p>
+<div class="timestamps">
+<span>00:00:00</span><span>Defining continual learning</span>
+<span>00:01:45</span><span>Ilija’s background in physics, AI safety and ML</span>
+<span>00:08:05</span><span>Continual learning from first principles</span>
+<span>00:12:08</span><span>The time component in machine vs organic learning</span>
+<span>00:17:30</span><span>Three flavors of incremental learning</span>
+<span>00:20:10</span><span>Five desirable aspects of continual learning</span>
+<span>00:23:10</span><span>Fixed general capacity</span>
+<span>00:32:40</span><span>Replay methods</span>
+<span>00:36:10</span><span>Regularization family</span>
+<span>00:38:00</span><span>Meta-learning methods</span>
+<span>00:43:50</span><span>Hypernetworks</span>
+<span>00:46:25</span><span>Hypernetwork experiments and compositional generalization (to 01:02:18)</span>
+<span>01:10:45</span><span>Method-agnostic benchmarking</span>
+<span>01:13:25</span><span>LLM generalization: in-context vs fine-tuning</span>
+<span>01:17:07</span><span>Self-study and learning connected topics (to 01:28:20)</span>
+<span>01:30:40</span><span>Future directions</span>
+</div>
+<p class="note"><b>A gap to fill yourself</b>The page lists “five desirable aspects” as a chapter title but does not name them. This book does not guess. Listen from 00:20:10 and write them in the margin.</p>
+
+<h2><span class="sec">0.2</span>How to read a recipe</h2>
+<p>This is a cookbook, so most chapters contain one or more <strong>recipe cards</strong>. A card has the same four parts every time:</p>
+<ul>
+<li><strong>You will need</strong>: the ingredients, meaning the setting, the data and the assumptions the method relies on.</li>
+<li><strong>Method</strong>: the algorithm, step by step, in the order you would actually run it.</li>
+<li><strong>The math</strong>: the paper’s own equations, typeset in LaTeX, with each symbol explained.</li>
+<li><strong>Chef’s notes</strong>: what the authors themselves say can go wrong.</li>
+</ul>
+<p>Around the cards, the chapters explain where each idea comes from and what the experiments showed, using the papers’ <strong>original figures with their original captions</strong> and <strong>tables transcribed number for number</strong>. Each figure carries a credit line and a link to its source, and the <a href="#references">References</a> chapter lists every paper with its licence. Quotation marks mean the authors’ own words. Everything else is written for this book.</p>
+
+<h2><span class="sec">0.3</span>The menu</h2>
+<ul class="menu">
+<li class="part">Part I · The problem</li>
+<li><a href="#organic"><span class="n">1</span><span><strong>Learning in time</strong><small>Neurons in a dish learn Pong, and living cells play Doom</small></span></a></li>
+<li><a href="#forgetting"><span class="n">2</span><span><strong>Catastrophic forgetting and Elastic Weight Consolidation</strong><small>Why networks forget, and the first widely used fix, derived from Bayes’ rule</small></span></a></li>
+<li><a href="#scenarios"><span class="n">3</span><span><strong>Three types of incremental learning</strong><small>Task-, domain- and class-incremental: what is being tested</small></span></a></li>
+<li class="part">Part II · Classic recipes</li>
+<li><a href="#strategies"><span class="n">4</span><span><strong>Five strategies, one bake-off</strong><small>Regularization, replay and friends, compared on equal terms</small></span></a></li>
+<li><a href="#meta"><span class="n">5</span><span><strong>Incentive and practice</strong><small>Meta-learning the skill instead of hoping it emerges</small></span></a></li>
+<li class="part">Part III · Recipes for language models</li>
+<li><a href="#hyper"><span class="n">6</span><span><strong>Weights that write weights</strong><small>Text-to-LoRA and Doc-to-LoRA</small></span></a></li>
+<li><a href="#context"><span class="n">7</span><span><strong>Context or weights?</strong><small>How in-context learning and fine-tuning generalize differently, and Negation Neglect</small></span></a></li>
+<li><a href="#sdft"><span class="n">8</span><span><strong>Teach yourself: Self-Distillation Fine-Tuning</strong><small>On-policy learning from demonstrations</small></span></a></li>
+<li><a href="#fast-slow"><span class="n">9</span><span><strong>Learning, fast and slow</strong><small>Prompts as fast weights, parameters as slow weights</small></span></a></li>
+<li><a href="#ttt"><span class="n">10</span><span><strong>Learning to discover at test time</strong><small>Reinforcement learning on the one problem you care about</small></span></a></li>
+<li class="part">Part IV · Tasting</li>
+<li><a href="#clbench"><span class="n">11</span><span><strong>Did it actually learn? Continual Learning Bench</strong><small>Measuring learning separately from capability</small></span></a></li>
+<li><a href="#vinfo"><span class="n">12</span><span><strong>Usable information</strong><small>Why computation can create information a learner can use</small></span></a></li>
+<li><a href="#open"><span class="n">∞</span><span><strong>What is still raw</strong><small>Open problems, in the authors’ own words</small></span></a></li>
+</ul>

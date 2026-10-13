@@ -1,0 +1,156 @@
+<!-- {"id":"ttt","part":"Part III · Recipes for language models","n":10,"title":"Learning to discover at test time","dek":"Most continual learning wants a model that is good on average. Discovery wants one great answer to one hard problem, and it pays to keep training on that problem until you find it.","sources":["ttt","episode"]} -->
+<p class="lede">Mert Yuksekgonul, Yu Sun and colleagues open with something familiar from any hard homework assignment: “you tried to guess the solution, but these attempts merely produced small signs of life. So you had to take a deep breath and learn from your failed attempts, which made your future attempts more intelligent.” A frozen model searching through prompts “is similar to a student who can never internalize the new ideas behind the assignment” <cite k="ttt"></cite>.</p>
+
+<fig k="ttt-1"></fig>
+
+<h2><span class="sec">10.1</span>A special kind of continual learning</h2>
+<blockquote><p>“This form of continual learning is quite special, because its goal is to produce one great solution rather than many good ones on average, and to solve this very problem rather than generalize to other problems.”</p><footer>Yuksekgonul et al. 2026, Abstract</footer></blockquote>
+<p>The episode treats this as its own category of problem <cite k="episode"></cite>. The paper roots it in <strong>test-time training</strong>, defined (following Sun et al.) as “any kind of training that formulates a potentially different learning problem based on each individual test instance”. The motivation is human: “most human learning happens without a boundary between training and testing. Consider your commute to work this morning. It is both ‘testing’ … and ‘training’” <cite k="ttt"></cite>.</p>
+
+<h2><span class="sec">10.2</span>Discovery, defined</h2>
+<p>A problem comes as a text description \(d\), which induces states \(s\) (candidate solutions, such as a GPU kernel) and a continuous reward \(R(s)\) (for example, inverse runtime). Let \(s_\text{sota}\) be the best known solution and \(r_\text{sota} = R(s_\text{sota})\). Then:</p>
+<div class="note"><b>Definition (Discovery)</b>“A discovery is an event where a state \(s\) is found such that \(R(s) > r_\text{sota}\). The larger the difference, the more significant the discovery.” <cite k="ttt"></cite></div>
+<p>Actions \(a\sim\pi_\theta(\cdot\mid d, s)\) are thinking tokens followed by code. For maths problems, the code is executed to build a construction: \(s' = \texttt{Python}(\texttt{Parse}(a))\).</p>
+
+<h3>Search methods the paper compares against</h3>
+<p><strong>Best-of-\(N\)</strong>: independent samples, \(a_i\sim\pi_\theta(\cdot\mid d, s)\) with \(s = s_\text{sota}\) or an empty start.</p>
+<p><strong>State reuse</strong>: warm-start from a buffer of earlier solutions,</p>
+\[ s_i\sim\texttt{reuse}(\mathcal{H}_i),\qquad a_i\sim\pi_\theta(\cdot\mid d, s_i),\qquad \mathcal{H}_{i+1} = \mathcal{H}_i\cup\{(s'_i, r_i)\}. \]
+<p><strong>State-action reuse</strong>, also called evolutionary search, as in AlphaEvolve: also feed back context \(c_i\) distilled from earlier attempts,</p>
+\[ s_i, c_i\sim\texttt{reuse}(\mathcal{H}_i),\qquad a_i\sim\pi_\theta(\cdot\mid d, s_i, c_i). \]
+<p>In all three the model’s weights \(\theta\) never change. TTT-Discover changes them.</p>
+
+<h2><span class="sec">10.3</span>Why naive RL is the wrong tool</h2>
+<p>Plain RL at test time maximises <em>expected</em> reward. The paper lists three mismatches with discovery <cite k="ttt"></cite>:</p>
+<ul>
+<li><strong>Objective.</strong> “Naive RL optimizes average performance, and is indifferent to the state of the art.” If the record kernel runs in 2000 µs, reaching 1900 µs may need a breakthrough, yet earns almost the same reward.</li>
+<li><strong>Short horizon.</strong> Starting every attempt from scratch limits how far one attempt can go. Reusing solutions extends it.</li>
+<li><strong>Exploration.</strong> Optimizing the average makes the policy collapse “to safe, high-reward actions rather than risky ones that might achieve discovery.”</li>
+</ul>
+
+<h2><span class="sec">10.4</span>The two ingredients</h2>
+<h3>An entropic objective that chases the maximum</h3>
+\[ J_\beta(\theta) \;=\; \mathbb{E}_{s\sim\texttt{reuse}(\mathcal{H})}\Big[\log\,\mathbb{E}_{a\sim\pi_\theta(\cdot\mid s)}\big[e^{\beta(s)R(s,a)}\big]\Big] \]
+\[ \nabla_\theta J_\beta(\theta) \;=\; \mathbb{E}_{s\sim\texttt{reuse}(\mathcal{H}),\;a\sim\pi_\theta(\cdot\mid s)}\Big[w_{\beta(s)}(a)\,\nabla_\theta\log\pi_\theta(a\mid s)\Big],\qquad w_{\beta(s)}(a) = \frac{e^{\beta(s)R(s,a)}}{\mathbb{E}_{\pi_\theta(\cdot\mid s)}\big[e^{\beta(s)R(s,a)}\big]} \]
+<p>Advantages are shaped with a KL penalty toward the starting policy:</p>
+\[ A(a; s) \;=\; w_{\beta(s)}(a) \;-\; 1 \;-\; \lambda\,\log\frac{\pi_\theta(a\mid s)}{\pi_{\theta_0}(a\mid s)}, \]
+<p class="eq-note">The \(-1\) is a baseline, since \(\mathbb{E}[w]=1\). “As \(\beta\to\infty\), the entropic objective tends to the max.” A fixed \(\beta\) was hard to tune across tasks, so \(\beta(s)\) is set adaptively per starting state by limiting the KL of the induced policy. The KL coefficient \(\lambda\) is 0.1 (0.01 for algorithm engineering) <cite k="ttt"></cite>.</p>
+
+<h3>PUCT to choose where to start</h3>
+<p>Each state in the buffer is scored as</p>
+\[ \text{score}(s) \;=\; Q(s) \;+\; c\cdot P(s)\cdot\frac{\sqrt{1+T}}{1+n(s)}, \]
+<ul>
+<li>\(Q(s)\) is the <em>maximum</em> reward among children of \(s\), not the mean: “we care about the best outcome starting from a state, not the average”.</li>
+<li>\(P(s)\) grows with \(s\)’s rank by reward.</li>
+<li>\(n(s)\) counts how often \(s\) or its descendants were expanded.</li>
+<li>\(T\) is the total number of expansions, and \(c\) the exploration coefficient <cite k="ttt"></cite>.</li>
+</ul>
+
+<div class="recipe">
+  <div class="recipe-head"><h3>TTT-Discover</h3><span>Recipe 10.1 · Yuksekgonul et al. 2026</span></div>
+  <div class="recipe-body">
+    <div>
+      <h4>You will need</h4>
+      <ul>
+        <li>One problem with a continuous, verifiable reward (0 for invalid solutions)</li>
+        <li>An open model (gpt-oss-120b) trainable with LoRA rank 32, via the Tinker API</li>
+        <li>About US$500 of compute: 50 steps × 512 rollouts</li>
+        <li>A buffer of attempts, initialised with an empty or random solution</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Method</h4>
+      <ol>
+        <li>Pick 8 starting states from the buffer with PUCT.</li>
+        <li>From each, sample a group of 64 rollouts (thinking plus code) with the current weights. Contexts are capped near 26,000 tokens to leave room for the answer.</li>
+        <li>Parse or execute each action, check validity, and score its reward. Add everything to the buffer.</li>
+        <li>Take one gradient step on the whole batch with the adaptive entropic objective, with importance-ratio correction for the sampler/learner mismatch.</li>
+        <li>Repeat for 50 steps, and return the best state ever found.</li>
+      </ol>
+    </div>
+  </div>
+  <div class="recipe-foot"><b>Fair comparison</b>Every result is compared with Best-of-25,600 using the same model and sampling budget, and with OpenEvolve (an open AlphaEvolve) under the same budget <cite k="ttt"></cite>.</div>
+</div>
+
+<h2><span class="sec">10.5</span>Results: every problem attempted</h2>
+<div class="tbl"><div class="tbl-scroll"><table>
+<thead><tr><th></th><th>Erdős min. overlap ↓</th><th>TriMul A100 ↓</th><th>TriMul H100 ↓</th><th>AtCoder AHC039 ↑</th><th>Denoising ↑</th></tr></thead>
+<tbody>
+<tr><th>Best human</th><td>0.380927</td><td>4531 µs</td><td>1371 µs</td><td>566,997</td><td>0.64</td></tr>
+<tr><th>Previous best AI</th><td>0.380924</td><td>N/A</td><td>N/A</td><td>558,026</td><td>N/A</td></tr>
+<tr><th>TTT-Discover</th><td class="best">0.380876</td><td class="best">2198 µs</td><td class="best">1161 µs</td><td class="best">567,062</td><td class="best">0.71</td></tr>
+</tbody></table></div>
+<p class="tbl-cap"><b>Table 10.1</b> Headline results from the first page of Yuksekgonul et al. 2026.</p></div>
+
+<h3>Mathematics</h3>
+<p><strong>Erdős’ minimum overlap problem</strong> (1955): split \(\{1,\dots,2n\}\) into two halves \(A\) and \(B\) of size \(n\). Let \(M_k\) count solutions of \(a_i - b_j = k\), and let \(M(n) = \min_{A,B}\max_k M_k\). The goal is to bound \(c = \lim_{n\to\infty} M(n)/n\). Before AlphaEvolve the bounds were \(0.379005 < c < 0.380927\), and AlphaEvolve lowered the upper bound to 0.380924 <cite k="ttt"></cite>.</p>
+<fig k="ttt-2"></fig>
+<p>TTT-Discover lowered it to <strong>0.380876</strong>, an improvement “16 times larger than AlphaEvolve’s improvement over the previous state-of-the-art”. It did this with a 600-piece asymmetric step function, where AlphaEvolve’s was 95 pieces and symmetric, and the best human result 51 pieces. The algorithm it found uses “FFT-accelerated gradient descent combined with random hill climbing and simulated annealing” <cite k="ttt"></cite>.</p>
+<div class="tbl"><div class="tbl-scroll"><table>
+<thead><tr><th>Method</th><th class="l">Model</th><th>Erdős ↓</th><th>AC1 ↓</th><th>AC2 ↑</th></tr></thead>
+<tbody>
+<tr><th>Best human</th><td class="l">–</td><td>0.380927</td><td>1.50973</td><td>0.9015</td></tr>
+<tr><th>AlphaEvolve</th><td class="l">Gemini-2.0 Pro + Flash</td><td>0.380924</td><td>1.50530</td><td>0.8962</td></tr>
+<tr><th>AlphaEvolve V2</th><td class="l">Gemini-2.0 Pro + Flash</td><td>0.380924</td><td>1.50317</td><td class="best">0.9610</td></tr>
+<tr><th>ThetaEvolve</th><td class="l">R1-Qwen3-8B</td><td>n/a</td><td>1.50681</td><td>0.9468</td></tr>
+<tr><th>ThetaEvolve w/ SOTA reuse</th><td class="l">R1-Qwen3-8B</td><td>n/a</td><td>1.50314</td><td>n/a</td></tr>
+<tr><th>OpenEvolve</th><td class="l">gpt-oss-120b</td><td>0.380965</td><td>1.50719</td><td>0.9449</td></tr>
+<tr><th>Best-of-25600</th><td class="l">gpt-oss-120b</td><td>0.380906</td><td>1.51004</td><td>0.9344</td></tr>
+<tr><th>TTT-Discover</th><td class="l">Qwen3-8B</td><td>0.380932</td><td>1.50525</td><td>0.9472</td></tr>
+<tr><th>TTT-Discover</th><td class="l">gpt-oss-120b</td><td class="best">0.380876</td><td class="best">1.50287</td><td>0.9591</td></tr>
+</tbody></table></div>
+<p class="tbl-cap"><b>Table 10.2</b> Mathematics. Table 2 of Yuksekgonul et al. 2026. AC1 and AC2 are the first and second autocorrelation inequalities. TTT-Discover sets a new record on Erdős and AC1, but not on AC2, where AlphaEvolve V2 still leads.</p></div>
+
+<h3>GPU kernels</h3>
+<div class="tbl"><div class="tbl-scroll"><table>
+<thead><tr><th>Method</th><th>A100 (µs)</th><th>H100 (µs)</th><th>B200 (µs) [95% CI]</th><th>MI300X (µs) [95% CI]</th></tr></thead>
+<tbody>
+<tr><th>1st human</th><td>4531.5</td><td>1371.1</td><td>1038.9 [1016.3, 1061.6]</td><td>2515.8 [2510.9, 2520.7]</td></tr>
+<tr><th>2nd human</th><td>4918.5</td><td>2368.0</td><td>2362.4 [2335.7, 2389.1]</td><td>5165.0 [5163.0, 5167.0]</td></tr>
+<tr><th>3rd human</th><td>5182.2</td><td>2545.7</td><td>1931.0 [1910.9, 1951.1]</td><td>5359.3 [5343.5, 5375.1]</td></tr>
+<tr><th>4th human</th><td>6097.8</td><td>3654.8</td><td>2248.9 [2089.4, 2408.4]</td><td>5981.4 [5978.4, 5984.4]</td></tr>
+<tr><th>5th human</th><td>8345.0</td><td>4233.1</td><td>6503.8 [6400.5, 6607.1]</td><td>8365.1 [8347.7, 8382.5]</td></tr>
+<tr><th>Best-of-25600</th><td>9219.7</td><td>5390.3</td><td>3254.9 [3252.5, 3257.4]</td><td>4902.0 [4897.6, 4906.4]</td></tr>
+<tr><th>TTT-Discover</th><td class="best">2198.2</td><td class="best">1161.2</td><td class="best">914.2 [907.3, 921.1]</td><td class="best">1555.7 [1550.8, 1560.6]</td></tr>
+</tbody></table></div>
+<p class="tbl-cap"><b>Table 10.3</b> GPUMode TriMul (triangular matrix multiplication, used in AlphaFold). Table 4 of Yuksekgonul et al. 2026. One model was trained using only H100 runtimes, and the kernels generalized to the other GPUs. On A100 the kernel is 50% faster than the top human.</p></div>
+<p>The organisers reviewed the winning kernel: it “correctly determined that the problem is memory bound because of the surrounding point-wise operations”, fusing operations, using fp16, and handing the big matmuls to cuBLAS. “This is similar to the current best human solutions, but executed on better.” On a second kernel competition, AMD MLA-Decode, TTT-Discover did <em>not</em> beat the top human with statistical significance <cite k="ttt"></cite>.</p>
+
+<h3>Algorithms and biology</h3>
+<div class="tbl"><div class="tbl-scroll"><table>
+<thead><tr><th>Method</th><th>Geometry (ahc039)</th><th>Scheduling (ahc058)</th></tr></thead>
+<tbody>
+<tr><th>1st human</th><td>566,997</td><td>847,674,723</td></tr>
+<tr><th>ALE-Agent</th><td>550,647</td><td>848,373,282</td></tr>
+<tr><th>ShinkaEvolve</th><td>558,026</td><td>n/a</td></tr>
+<tr><th>Best-of-25600</th><td>554,171</td><td>772,429,752</td></tr>
+<tr><th>TTT-Discover</th><td class="best">567,062</td><td class="best">848,414,228</td></tr>
+</tbody></table></div>
+<p class="tbl-cap"><b>Table 10.4</b> AtCoder Heuristic Contests. Table 6 of Yuksekgonul et al. 2026. Either submission would have placed first in its contest.</p></div>
+<p>On single-cell RNA-seq denoising (OpenProblems), starting from the MAGIC algorithm, TTT-Discover added “gene-adaptive transform ensembling, low-rank SVD refinement, and log-space polishing”. It reached a score of 0.71 on PBMC and 0.73 on Tabula, up from MAGIC’s 0.64. The paper adds its own disclaimer that “benchmark metrics are inherently incomplete and do not guarantee biological validity”, and the reviewing biologist made the same point <cite k="ttt"></cite>.</p>
+
+<h2><span class="sec">10.6</span>Which ingredient matters?</h2>
+<fig k="ttt-4"></fig>
+<div class="tbl"><div class="tbl-scroll"><table>
+<thead><tr><th class="l">train</th><th class="l">reuse</th><th>Best runtime (µs) ↓</th></tr></thead>
+<tbody>
+<tr><th class="l">Best human kernel</th><td class="l">–</td><td>1371.1</td></tr>
+<tr><th class="l">TTT with adaptive entropic</th><td class="l">PUCT</td><td class="best">1203.10</td></tr>
+<tr><th class="l">TTT with constant β entropic</th><td class="l">PUCT</td><td>1483.83</td></tr>
+<tr><th class="l">TTT with expected reward</th><td class="l">PUCT</td><td>1985.67</td></tr>
+<tr><th class="l">No TTT</th><td class="l">PUCT</td><td>2060.70</td></tr>
+<tr><th class="l">TTT with adaptive entropic</th><td class="l">ε-greedy</td><td>1328.89</td></tr>
+<tr><th class="l">TTT with adaptive entropic</th><td class="l">no reuse</td><td>5274.03</td></tr>
+<tr><th class="l">Naive test-time RL (expected reward)</th><td class="l">no reuse</td><td>5328.73</td></tr>
+<tr><th class="l">Best-of-N (no TTT)</th><td class="l">no reuse</td><td>5352.36</td></tr>
+</tbody></table></div>
+<p class="tbl-cap"><b>Table 10.5</b> Ablations on TriMul, timed on H100. Table 8 of Yuksekgonul et al. 2026, using the authors’ evaluator. Only the full method beats the best human.</p></div>
+<p>Both halves are needed. Learning without reuse barely helps, and reuse without learning stalls. “Without any test-time training, both the mean reward and the max reward stagnates” <cite k="ttt"></cite>.</p>
+
+<div class="caveat"><b>The authors’ own limits</b>“The current form of our method can only be applied to problems with continuous rewards, and the most important direction for future work is test-time training for problems with sparse or binary rewards, or problems in non-verifiable domains.” <cite k="ttt"></cite></div>
+
+<div class="takeaways"><h4>What to take from this chapter</h4><ol>
+<li>When the goal is one record-breaking answer, train on the test problem itself. The model’s own attempts are the most relevant data there is.</li>
+<li>Optimize for the maximum, not the mean: an entropic objective \(\log\mathbb{E}[e^{\beta R}]\) and PUCT reuse scored by the best child.</li>
+<li>Forgetting other skills hardly matters here, which shows how much the right continual learning method depends on the goal.</li>
+</ol></div>

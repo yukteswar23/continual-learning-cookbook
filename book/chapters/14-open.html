@@ -1,0 +1,80 @@
+<!-- {"id":"open","part":"Part IV · Tasting","n":"∞","title":"What is still raw","dek":"Each paper ends by saying what it did not solve. Read together, those endings are a map of the open problems in continual learning.","sources":["dishbrain","ewc","threetypes","pip","acl","t2l","d2l","lampinen","negation","sdft","fst","ttt","clbench","episode"]} -->
+<p class="lede">The episode ends on future directions at 01:30:40 <cite k="episode"></cite>. This book ends the same way, but only with directions the authors themselves wrote down. Nothing on this page is a research gap invented here. Each item is quoted from a paper’s limitations or future-work section.</p>
+
+<h2><span class="sec">∞.1</span>Where each recipe keeps the past</h2>
+<p>First, a summary of the whole book. Every method in it answers one question differently: <em>where does knowledge from earlier experience live?</em></p>
+<div class="tbl"><div class="tbl-scroll"><table>
+<thead><tr><th class="l">Recipe</th><th class="l">Where the past is kept</th><th class="l">Main cost or risk, as reported</th><th class="l">Chapter</th></tr></thead>
+<tbody>
+<tr><th class="l">EWC / SI</th><td class="l">In the loss: a quadratic spring on important weights</td><td class="l">Fails in class-incremental learning; diagonal Fisher underestimates uncertainty</td><td class="l"><a href="#forgetting">2</a>, <a href="#strategies">4</a></td></tr>
+<tr><th class="l">Replay (ER, BI-R, …)</th><td class="l">In the data: stored or generated examples</td><td class="l">Memory and storage; generative replay struggles on complex inputs</td><td class="l"><a href="#strategies">4</a></td></tr>
+<tr><th class="l">Templates (iCaRL, generative classifier)</th><td class="l">In per-class prototypes or generators</td><td class="l">Extra models or stored exemplars</td><td class="l"><a href="#strategies">4</a></td></tr>
+<tr><th class="l">Meta-learning (MLC, ACL)</th><td class="l">In the learner: a learned in-context algorithm</td><td class="l">Expensive meta-training; limited out-of-distribution transfer</td><td class="l"><a href="#meta">5</a></td></tr>
+<tr><th class="l">Hypernetworks (T2L, D2L)</th><td class="l">In generated adapters; base weights frozen</td><td class="l">Needs aligned descriptions or large meta-training corpora</td><td class="l"><a href="#hyper">6</a></td></tr>
+<tr><th class="l">Augmented fine-tuning</th><td class="l">In weights, via the model’s own in-context inferences</td><td class="l">Extra train-time compute; tested on synthetic data</td><td class="l"><a href="#context">7</a></td></tr>
+<tr><th class="l">SDFT</th><td class="l">In weights, updated on-policy from a self-teacher</td><td class="l">About 2.5× FLOPs; needs strong in-context learning</td><td class="l"><a href="#sdft">8</a></td></tr>
+<tr><th class="l">Fast–slow training</th><td class="l">Split: task detail in prompts, durable skill in weights</td><td class="l">Alternating optimisers; one instantiation tested</td><td class="l"><a href="#fast-slow">9</a></td></tr>
+<tr><th class="l">TTT-Discover</th><td class="l">In weights adapted to one problem, plus a solution buffer</td><td class="l">Continuous rewards only</td><td class="l"><a href="#ttt">10</a></td></tr>
+<tr><th class="l">Full-context ICL (CL-Bench)</th><td class="l">In the context window</td><td class="l">Captures at most about 25% of the available learning headroom</td><td class="l"><a href="#clbench">11</a></td></tr>
+</tbody></table></div>
+<p class="tbl-cap"><b>Table ∞.1</b> A summary written for this book. Each risk is taken from the chapter that covers the method.</p></div>
+
+<h2><span class="sec">∞.2</span>Open problems, in the authors’ words</h2>
+
+<h3>Keeping what you learn across time</h3>
+<ul>
+<li>“While within-session learning was well established, between-session learning over multiple days was not robustly observed. Cultures appeared to relearn associations with each new session.” <cite k="dishbrain"></cite></li>
+<li>“Although on-policy learning substantially reduces catastrophic forgetting compared to off-policy methods, some degradation of prior capabilities remains. Developing complementary techniques that further minimize forgetting represents an important avenue for future research.” <cite k="sdft"></cite></li>
+</ul>
+
+<h3>Estimating what matters</h3>
+<ul>
+<li>“It is therefore likely that the chief limitation of the current implementation is that it under-estimates parameter uncertainty.” <cite k="ewc"></cite></li>
+</ul>
+
+<h3>Telling apart things never seen together</h3>
+<ul>
+<li>“For learning to distinguish between classes not observed together, it might be unavoidable to use either replay … or template-based classification.” And for the task-incremental case: “positive forward or backward transfer between contexts is necessary, but achieving such positive transfer is not trivial.” <cite k="threetypes"></cite></li>
+</ul>
+
+<h3>Making learned learners general</h3>
+<ul>
+<li>“It remains an open challenge to build a meta-meta-learning framework to support generalization of the high-level skills for compositional learning, continual learning, few-shot learning, or multi-step reasoning abilities, across different problem settings.” <cite k="pip"></cite></li>
+<li>“Directly scaling ACL for real-world tasks involving many more classes does not seem straightforward: it would involve very long meta-training sequences.” <cite k="acl"></cite></li>
+</ul>
+
+<h3>Knowing what a model absorbs</h3>
+<ul>
+<li>“Further investigation of when augmentation does and does not address Negation Neglect is an interesting direction for future work.” And on its cause: “Exploration of the origins of this inductive bias is left for future work.” <cite k="negation"></cite></li>
+<li>On fine-tuning versus in-context learning: “future work should study more carefully the differences in how models learn and generalize in these settings, including newer reasoning models.” <cite k="lampinen"></cite></li>
+</ul>
+
+<h3>Learning from imperfect teachers</h3>
+<ul>
+<li>“Extending SDFT to learn from non-expert or noisy demonstrations, or from unstructured data such as user conversations, would broaden its applicability to real-world continual learning settings where high-quality supervision is scarce.” Also: “SDFT … struggles when the desired behavior requires a fundamental shift in the model’s generation patterns.” <cite k="sdft"></cite></li>
+</ul>
+
+<h3>Many channels of adaptation</h3>
+<ul>
+<li>“Studying the impact of changing the prompt or the weight optimizer is an interesting avenue for future work … we believe a more comprehensive study of [distillation-based approaches] to be an exciting avenue.” <cite k="fst"></cite></li>
+<li>Doc-to-LoRA’s authors “envision that D2L can facilitate rapid adaptation of LLMs, opening up the possibility of frequent knowledge updates and personalized chat behavior.” <cite k="d2l"></cite></li>
+<li>Text-to-LoRA works only with good descriptions: “if the descriptions are not aligned with the task at hand, the generated LoRAs will not perform as well.” <cite k="t2l"></cite></li>
+</ul>
+
+<h3>Beyond verifiable, continuous rewards</h3>
+<ul>
+<li>“The most important direction for future work is test-time training for problems with sparse or binary rewards, or problems in non-verifiable domains.” <cite k="ttt"></cite></li>
+</ul>
+
+<h3>Measuring all of the above</h3>
+<ul>
+<li>“We do not evaluate parametric approaches such as test-time training, though we seek to add them via community contributions.” And the headline: “continual learning in LLM-based agents remains an open problem.” <cite k="clbench"></cite></li>
+</ul>
+
+<h2><span class="sec">∞.3</span>Where to go next</h2>
+<ol>
+<li>Watch the full episode <cite k="episode"></cite>, and fill in the “five desirable aspects” from 00:20:10.</li>
+<li>Reproduce the EWC result on permuted MNIST with the hyperparameters in Table 2.1, then run the same code class-incrementally and watch it fail, as Table 4.1 predicts. The three-types authors released their code under the MIT licence at <a href="https://github.com/GMvandeVen/continual-learning" target="_blank" rel="noopener">github.com/GMvandeVen/continual-learning</a> <cite k="threetypes"></cite>.</li>
+<li>Run a CL-Bench task with the command in Chapter 11, then try to beat full-context ICL.</li>
+</ol>
+<p>Every source, with links and licences, is in the <a href="#references">References</a>.</p>

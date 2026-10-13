@@ -1,0 +1,106 @@
+{
+  "episode": {
+    "short": "Lichkovski & Mahdid 2026",
+    "cite": "Yacine Mahdid (host), with Ilija Lichkovski (Prime Intellect). “What Continual Learning Actually Means feat. Ilija Lichkovski from Prime Intellect.” Learning with Yacine, 12 October 2026. Video conversation, about 1 h 30 min.",
+    "url": "https://www.yacinemahdid.com/p/what-continual-learning-actually",
+    "license": "All rights reserved by the publisher; thumbnail shown with credit and link."
+  },
+  "dishbrain": {
+    "short": "Kagan et al. 2022",
+    "cite": "Brett J. Kagan, Andy C. Kitchen, Nhi T. Tran, Forough Habibollahi, Moein Khajehnejad, Bradyn J. Parker, Anjali Bhat, Ben Rollo, Adeel Razi, Karl J. Friston. “In vitro neurons learn and exhibit sentience when embodied in a simulated game-world.” Neuron 110(23): 3952–3969.e8, 2022.",
+    "url": "https://doi.org/10.1016/j.neuron.2022.09.001",
+    "license": "CC BY 4.0 (open access)"
+  },
+  "doom": {
+    "short": "doom-neuron (GitHub)",
+    "cite": "SeanCole02. “doom-neuron”: human brain cells on Cortical Labs’ CL1 playing Doom. GitHub repository, GPL-3.0.",
+    "url": "https://github.com/SeanCole02/doom-neuron",
+    "license": "GPL-3.0 (code). No figures reproduced."
+  },
+  "ewc": {
+    "short": "Kirkpatrick et al. 2017",
+    "cite": "James Kirkpatrick, Razvan Pascanu, Neil Rabinowitz, Joel Veness, Guillaume Desjardins, Andrei A. Rusu, Kieran Milan, John Quan, Tiago Ramalho, Agnieszka Grabska-Barwinska, Demis Hassabis, Claudia Clopath, Dharshan Kumaran, Raia Hadsell. “Overcoming catastrophic forgetting in neural networks.” PNAS 114(13), 2017. arXiv:1612.00796.",
+    "url": "https://arxiv.org/abs/1612.00796",
+    "license": "arXiv non-exclusive distribution licence. Figures reproduced with attribution for study."
+  },
+  "threetypes": {
+    "short": "van de Ven et al. 2022",
+    "cite": "Gido M. van de Ven, Tinne Tuytelaars, Andreas S. Tolias. “Three types of incremental learning.” Nature Machine Intelligence 4: 1185–1197, 2022.",
+    "url": "https://www.nature.com/articles/s42256-022-00568-3",
+    "license": "CC BY 4.0 (open access)"
+  },
+  "pip": {
+    "short": "Irie & Lake 2025",
+    "cite": "Kazuki Irie, Brenden M. Lake. “Overcoming classic challenges for artificial neural networks by providing incentives and practice.” Nature Machine Intelligence (2025). arXiv:2410.10596.",
+    "url": "https://arxiv.org/abs/2410.10596",
+    "license": "CC BY 4.0"
+  },
+  "mlc": {
+    "short": "Lake & Baroni 2023",
+    "cite": "Brenden M. Lake, Marco Baroni. “Human-like systematic generalization through a meta-learning neural network.” Nature 623: 115–121, 2023.",
+    "url": "https://doi.org/10.1038/s41586-023-06668-3",
+    "license": "CC BY 4.0 (open access)",
+    "note": "The reading list linked nature.com/articles/s41586-018-0308-0, which does not resolve to this paper; the DOI above is the correct one."
+  },
+  "acl": {
+    "short": "Irie, Csordás & Schmidhuber 2025",
+    "cite": "Kazuki Irie, Róbert Csordás, Jürgen Schmidhuber. “Metalearning Continual Learning Algorithms.” Transactions on Machine Learning Research, 2025. arXiv:2312.00276.",
+    "url": "https://arxiv.org/abs/2312.00276",
+    "license": "CC BY 4.0"
+  },
+  "t2l": {
+    "short": "Charakorn et al. 2025",
+    "cite": "Rujikorn Charakorn, Edoardo Cetin, Yujin Tang, Robert Tjarko Lange. “Text-to-LoRA: Instant Transformer Adaption.” ICML 2025. arXiv:2506.06105.",
+    "url": "https://arxiv.org/abs/2506.06105",
+    "license": "CC BY-NC-SA 4.0"
+  },
+  "d2l": {
+    "short": "Charakorn et al. 2026",
+    "cite": "Rujikorn Charakorn, Edoardo Cetin, Shinnosuke Uesaka, Robert Tjarko Lange. “Doc-to-LoRA: Learning to Instantly Internalize Contexts.” arXiv:2602.15902, 2026.",
+    "url": "https://arxiv.org/abs/2602.15902",
+    "license": "CC BY-SA 4.0"
+  },
+  "lampinen": {
+    "short": "Lampinen et al. 2025",
+    "cite": "Andrew K. Lampinen, Arslan Chaudhry, Stephanie C. Y. Chan, Cody Wild, Diane Wan, Alex Ku, Jörg Bornschein, Razvan Pascanu, Murray Shanahan, James L. McClelland. “On the generalization of language models from in-context learning and finetuning: a controlled study.” FoRLM Workshop, NeurIPS 2025. arXiv:2505.00661.",
+    "url": "https://arxiv.org/abs/2505.00661",
+    "license": "CC BY 4.0"
+  },
+  "negation": {
+    "short": "Mayne et al. 2026",
+    "cite": "Harry Mayne, Lev McKinney, Jan Dubiński, Adam Karvonen, James Chua, Owain Evans. “Negation Neglect: When models fail to learn negations in training.” arXiv:2605.13829, 2026.",
+    "url": "https://arxiv.org/abs/2605.13829",
+    "license": "CC BY 4.0"
+  },
+  "sdft": {
+    "short": "Shenfeld et al. 2026",
+    "cite": "Idan Shenfeld, Mehul Damani, Jonas Hübotter, Pulkit Agrawal. “Self-Distillation Enables Continual Learning.” arXiv:2601.19897, 2026.",
+    "url": "https://arxiv.org/abs/2601.19897",
+    "license": "CC BY 4.0"
+  },
+  "fst": {
+    "short": "Tiwari et al. 2026",
+    "cite": "Rishabh Tiwari, Kusha Sareen, Lakshya A Agrawal, Joseph E. Gonzalez, Matei Zaharia, Kurt Keutzer, Inderjit S Dhillon, Rishabh Agarwal, Devvrit Khatri. “Learning, Fast and Slow: Towards LLMs That Adapt Continually.” arXiv:2605.12484, 2026.",
+    "url": "https://arxiv.org/abs/2605.12484",
+    "license": "CC BY 4.0"
+  },
+  "ttt": {
+    "short": "Yuksekgonul et al. 2026",
+    "cite": "Mert Yuksekgonul, Daniel Koceja, Xinhao Li, Federico Bianchi, Jed McCaleb, Xiaolong Wang, Jan Kautz, Yejin Choi, James Zou, Carlos Guestrin, Yu Sun. “Learning to Discover at Test Time.” arXiv:2601.16175, 2026.",
+    "url": "https://arxiv.org/abs/2601.16175",
+    "license": "CC BY 4.0"
+  },
+  "clbench": {
+    "short": "Asawa et al. 2026",
+    "cite": "Parth Asawa, Christopher M. Glaze, Gabriel Orlanski, Ramya Ramakrishnan, Benji Xu, Asim Biswal, Vincent Sunn Chen, Frederic Sala, Matei Zaharia, Joseph E. Gonzalez. “Continual Learning Bench: Evaluating Frontier AI Systems in Real-World Stateful Environments.” arXiv:2606.05661, 2026. Website: continual-learning-bench.com. Code: github.com/pgasawa/continual-learning-bench (Apache-2.0).",
+    "url": "https://arxiv.org/abs/2606.05661",
+    "license": "CC BY 4.0",
+    "links": [["Website & leaderboard", "https://continual-learning-bench.com/"], ["GitHub repository", "https://github.com/pgasawa/continual-learning-bench"]]
+  },
+  "vinfo": {
+    "short": "Xu et al. 2020",
+    "cite": "Yilun Xu, Shengjia Zhao, Jiaming Song, Russell Stewart, Stefano Ermon. “A Theory of Usable Information Under Computational Constraints.” ICLR 2020. arXiv:2002.10689.",
+    "url": "https://arxiv.org/abs/2002.10689",
+    "license": "arXiv non-exclusive distribution licence. Figure reproduced with attribution for study."
+  }
+}

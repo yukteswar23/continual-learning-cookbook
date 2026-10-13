@@ -1,0 +1,152 @@
+<!-- {"id":"hyper","part":"Part III · Recipes for language models","n":6,"title":"Weights that write weights","dek":"A hypernetwork is a network whose output is another network’s weights. Train one well, and adapting a language model to a task, or to a document, becomes a single forward pass.","sources":["t2l","d2l","episode"]} -->
+<p class="lede">Fine-tuning a large model for a new task is slow, expensive and fussy about hyperparameters. The authors of Text-to-LoRA put it this way: fine-tuning techniques “require expensive and lengthy training while being notably sensitive to hyperparameter choices” <cite k="t2l"></cite>. The episode turns to hypernetworks at 43:50 and spends the next twenty minutes on hypernetwork experiments <cite k="episode"></cite>. These two papers from Sakana AI are the clearest current recipes.</p>
+
+<h2><span class="sec">6.1</span>Two ingredients: LoRA and hypernetworks</h2>
+<p><strong>LoRA</strong> freezes the base weights and learns a small low-rank update. For a linear map \(h = W_0 x\), the adapted map is</p>
+\[ h \;=\; W_0 x + \Delta W x \;=\; W_0 x + B^{\top} A\, x, \qquad A, B \in \mathbb{R}^{r\times d},\; r \ll d . \]
+<p>A <strong>hypernetwork</strong> “generates parameters for another ‘base’ network”. Given a layer descriptor \(\phi_l\), a hypernetwork with parameters \(\theta\) produces \(W_l = h_\theta(\phi_l)\) <cite k="t2l"></cite>. For continual learning the appeal is clear: the base model never changes, and every new skill or document becomes its own small adapter.</p>
+
+<h2><span class="sec">6.2</span>Text-to-LoRA: adapters from a sentence</h2>
+<p>The paper asks two questions: “Can we end-to-end train a neural network to compress many pre-trained LoRAs?” and “Can we decode new task-specific LoRA adapters solely based on natural-language instructions for an unseen task at test time?” <cite k="t2l"></cite>.</p>
+
+<fig k="t2l-1"></fig>
+
+<p>For every target module \(m\) (for example the query projection) and layer \(l\), T2L generates the two low-rank matrices from a task description \(z^i\):</p>
+\[ \Delta W^i_{m,l} \;=\; h_\theta\big(\phi^i_{m,l}\big), \qquad \phi^i_{m,l} \;=\; \mathrm{concat}\big[f(z^i),\; E[m],\; E[l]\big], \]
+<p class="eq-note">\(f\) embeds the description, using the CLS token of a bidirectional encoder or the last token of an LLM. \(E\) holds learned embeddings for module type and layer depth. All modules and layers are batched, so one forward pass produces the whole adapter.</p>
+
+<p>There are two ways to train it. <strong>Reconstruction</strong> distils a library of existing LoRAs \(\Omega\):</p>
+\[ \mathcal{L}(\Omega, \theta) \;=\; \mathbb{E}_{\Delta W^i\sim\Omega}\,\big|\Delta W^i - h_\theta(\phi^i)\big| . \]
+<p><strong>Supervised fine-tuning</strong> skips the library and trains end-to-end through the base model \(\Psi\) on many task datasets \(\mathcal{D}^i\), sampling a description \(z^i\) each time:</p>
+\[ \theta \;=\; \arg\min_\theta\; \mathbb{E}_{\mathcal{D}^i\sim\mathcal{D},\; z^i\sim Z^i}\; \mathcal{L}_\text{SFT}\big(\mathcal{D}^i,\, \Psi,\, h_\theta(\phi^i)\big). \]
+
+<fig k="t2l-2"></fig>
+<p>The three sizes differ only in the output head:</p>
+<ul>
+<li><strong>L</strong> outputs \(A\) and \(B\) together, with a head of size \(d_\text{out}\times 2\times r\times d\).</li>
+<li><strong>M</strong> shares one head between \(A\) and \(B\), with size \(d_\text{out}\times r\times d\).</li>
+<li><strong>S</strong> outputs one rank at a time, with size \(d_\text{emb}\times d\).</li>
+</ul>
+<p>With rank-8 LoRAs on the query and value projections of Mistral-7B-Instruct (3.4M adapter parameters), the hypernetworks have 55M, 34M and 5M trainable parameters <cite k="t2l"></cite>.</p>
+
+<h3>Compressing adapters</h3>
+<div class="tbl"><div class="tbl-scroll"><table>
+<thead><tr><th>Model</th><th>ArcC</th><th>ArcE</th><th>BQ</th><th>GSM8K</th><th>HS</th><th>OQA</th><th>PIQA</th><th>WG</th><th>MBPP</th><th>Avg</th></tr></thead>
+<tbody>
+<tr><th>Base model</th><td>65.4</td><td>77.8</td><td>71.6</td><td>40.9</td><td>49.7</td><td>54.2</td><td>72.8</td><td>45.0</td><td>43.1</td><td>55.8</td></tr>
+<tr class="grp"><th colspan="11">One-hot task embedding</th></tr>
+<tr><th>T2L (Recon) L</th><td>76.4</td><td>89.9</td><td>89.4</td><td>53.8</td><td>92.6</td><td>85.0</td><td>69.7</td><td>51.2</td><td>52.6</td><td>73.4</td></tr>
+<tr><th>T2L (Recon) M</th><td>76.7</td><td>89.9</td><td>89.4</td><td>53.2</td><td>92.6</td><td>85.0</td><td>69.9</td><td>51.4</td><td>52.9</td><td>73.4</td></tr>
+<tr><th>T2L (Recon) S</th><td>75.2</td><td>88.8</td><td>87.4</td><td>50.9</td><td>89.1</td><td>75.6</td><td>83.9</td><td>58.1</td><td>48.1</td><td>73.0</td></tr>
+<tr class="grp"><th colspan="11">Task-description embedding</th></tr>
+<tr><th>T2L (Recon) L</th><td>76.6</td><td>89.8</td><td>89.4</td><td>53.9</td><td>92.6</td><td>85.0</td><td>69.6</td><td>51.2</td><td>51.8</td><td>73.3</td></tr>
+<tr><th>T2L (Recon) M</th><td>76.5</td><td>89.9</td><td>89.4</td><td>53.9</td><td>92.5</td><td>84.9</td><td>70.4</td><td>51.6</td><td>52.8</td><td class="best">73.5</td></tr>
+<tr><th>T2L (Recon) S</th><td>75.4</td><td>88.8</td><td>87.8</td><td>49.1</td><td>89.7</td><td>76.7</td><td>84.2</td><td>56.9</td><td>48.0</td><td>73.0</td></tr>
+<tr><th>Task-specific LoRAs</th><td>76.6</td><td>89.9</td><td>89.4</td><td>53.5</td><td>92.6</td><td>85.0</td><td>69.9</td><td>51.1</td><td>52.1</td><td>73.3</td></tr>
+</tbody></table></div>
+<p class="tbl-cap"><b>Table 6.1</b> T2L trained by reconstruction on 9 benchmark LoRAs. Table 1 of Charakorn et al. 2025. Accuracy (MBPP: pass@1). T2L recovers the oracle adapters and sometimes beats them. The authors hypothesise that lossy compression acts as regularization, most visibly on PIQA and WG, where the oracle LoRA overfits.</p></div>
+<p>As more adapters are packed in, the compression becomes lossy. Still, “all T2L architectures can maintain around 65% of oracles’ performance, and the performance does not drop further even at \(>8\times10^{-4}\) per-element L1 error” <cite k="t2l"></cite>.</p>
+
+<h3>Zero-shot adapters for unseen tasks</h3>
+<p>Trained with SFT on 479 tasks from Super Natural Instructions, each with 128 generated descriptions, T2L builds adapters for benchmarks it has never seen, from a description alone.</p>
+<div class="tbl"><div class="tbl-scroll"><table>
+<thead><tr><th>Method</th><th>ArcC</th><th>ArcE</th><th>BQ</th><th>HS</th><th>OQA</th><th>PIQA</th><th>WG</th><th>MBPP</th><th>Avg (8)</th><th>GSM8K</th><th>HE</th><th>Avg (10)</th></tr></thead>
+<tbody>
+<tr class="grp"><th colspan="13">No test-time adaptation</th></tr>
+<tr><th>Mistral-7B-Instruct</th><td>65.4</td><td>77.8</td><td>71.6</td><td>49.7</td><td>54.2</td><td>72.8</td><td>45.0</td><td>43.1</td><td>60.0</td><td>40.9</td><td>37.2</td><td>55.8</td></tr>
+<tr><th>Prepending task desc.</th><td>72.0</td><td>85.8</td><td>67.6</td><td>58.9</td><td>63.4</td><td>77.9</td><td>59.0</td><td>41.6</td><td>65.8</td><td>40.9</td><td>39.0</td><td>60.6</td></tr>
+<tr><th>3-shot ICL</th><td>72.1</td><td>85.9</td><td>71.7</td><td>59.0</td><td>66.2</td><td>76.2</td><td>58.0</td><td>42.6</td><td>66.5</td><td>40.9</td><td>37.2</td><td>61.0</td></tr>
+<tr><th>Average LoRA</th><td>70.7</td><td>84.4</td><td>75.4</td><td>59.9</td><td>59.0</td><td>78.0</td><td>54.3</td><td>47.1</td><td>66.1</td><td>42.4</td><td>37.8</td><td>60.9</td></tr>
+<tr><th>Multi-task LoRA</th><td>76.2</td><td>88.3</td><td>85.5</td><td>65.2</td><td>68.0</td><td>81.8</td><td>62.4</td><td>48.1</td><td>71.9</td><td>47.5</td><td>39.6</td><td>66.3</td></tr>
+<tr class="grp"><th colspan="13">Zero-shot adaptation</th></tr>
+<tr><th>Arrow Routing</th><td>60.9</td><td>86.2</td><td>87.6</td><td>80.8</td><td>48.6</td><td>83.0</td><td>68.5</td><td>50.2</td><td>70.7</td><td>N/A</td><td>28.7</td><td>N/A</td></tr>
+<tr><th>Hyperdecoders (per-instance)</th><td>76.6</td><td>88.5</td><td>83.9</td><td>65.2</td><td>76.6</td><td>81.3</td><td>64.9</td><td>51.6</td><td>73.6</td><td>43.6</td><td>40.9</td><td>67.3</td></tr>
+<tr><th>T2L (SFT) S</th><td>76.0</td><td>88.7</td><td>83.8</td><td>68.0</td><td>71.6</td><td>82.3</td><td>61.0</td><td>41.2</td><td>71.6</td><td>47.3</td><td>39.0</td><td>65.9</td></tr>
+<tr><th>T2L (SFT) M</th><td>77.2</td><td>89.0</td><td>84.3</td><td>65.1</td><td>76.1</td><td>81.8</td><td>64.0</td><td>50.5</td><td>73.5</td><td>45.2</td><td>41.3</td><td>67.5</td></tr>
+<tr><th>T2L (SFT) L</th><td>77.5</td><td>88.9</td><td>85.0</td><td>66.5</td><td>75.5</td><td>82.1</td><td>64.2</td><td>51.9</td><td class="best">73.9</td><td>45.8</td><td>39.2</td><td class="best">67.7</td></tr>
+<tr class="grp"><th colspan="13">Oracle</th></tr>
+<tr><th>Task-specific LoRAs</th><td>76.6</td><td>89.9</td><td>89.4</td><td>92.6</td><td>85.0</td><td>69.9</td><td>51.1</td><td>52.1</td><td>75.8</td><td>53.5</td><td>N/A</td><td>N/A</td></tr>
+</tbody></table></div>
+<p class="tbl-cap"><b>Table 6.2</b> Zero-shot performance on unseen benchmark tasks. Table 2 of Charakorn et al. 2025. T2L scores are averages over three generated LoRAs, each from a different description. Arrow Routing numbers come from another paper with different adapters and prompts, so they are only indirectly comparable.</p></div>
+
+<p>The description matters, and it can steer how the model reasons, not just whether it is right:</p>
+<fig k="t2l-4"></fig>
+
+<p>The generated adapters are genuinely task-specific. Similar tasks such as MBPP and HumanEval cluster together:</p>
+<fig k="t2l-5"></fig>
+
+<div class="caveat"><b>Chef’s notes from the paper</b>Reconstruction training does not generalize to unseen tasks: averaged over architectures, the SFT-trained models score 66.3 and the reconstruction-trained ones 61.8. The authors trace this to pre-trained adapters for similar tasks not lying near each other in weight space. Descriptions that do not match the task produce much worse adapters: 51.4 for random training descriptions versus 73.3 for matched ones. Compute must scale with the number of training tasks, and the S variant stops improving at 479 tasks, “potentially due to its limited model capacity” <cite k="t2l"></cite>.</div>
+
+<h2><span class="sec">6.3</span>Doc-to-LoRA: read once, remember afterwards</h2>
+<p>T2L adapts a model to a <em>task</em>. Doc-to-LoRA (D2L) adapts it to a <em>document</em>. The motivation is the cost of long contexts: in-context learning “is transient and memory-intensive; long prompts increase latency and memory via quadratic attention and KV-cache growth” <cite k="d2l"></cite>. The classic remedy is <strong>context distillation (CD)</strong>: train a copy of the model, without the context, to behave as if it had it.</p>
+
+<p>For a context \(c\), the paper writes the internalization objective over self-generated queries and teacher responses \(\mathcal{D}_c = \{(x_i, y_i)\}\) (Eq. 2):</p>
+\[ \min_{\theta_c}\; \mathbb{E}_{(x,y)\sim\mathcal{D}_c}\Big[\mathrm{KL}\big(p_\theta(y\mid x, c)\,\big\|\,p_{\theta_c}(y\mid x)\big)\Big]. \]
+<p>Running this for every new document is far too slow. D2L <em>meta-learns</em> it instead. A hypernetwork \(H_\phi\) maps a context directly to an adapter, \(\theta_c = \theta + H_\phi(c)\), and is trained across many contexts (Eqs. 3–4):</p>
+\[ \min_\phi\; \mathbb{E}_{(c,\mathcal{D}_c)\sim\mathcal{D}}\;\mathbb{E}_{(x,y)\sim\mathcal{D}_c}\; \mathrm{KL}\big(p_\theta(y\mid x, c)\,\big\|\,p_{\theta + H_\phi(c)}(y\mid x)\big). \]
+<p>“A trained mapping \(H\) amortizes both the query generation process and the backpropagation needed by traditional CD” <cite k="d2l"></cite>.</p>
+
+<fig k="d2l-1"></fig>
+
+<h3>Inside the hypernetwork</h3>
+<p>The context is passed once through the frozen target LLM to get per-layer activations \(Z\in\mathbb{R}^{L\times N\times D}\). For each layer \(l\), a shared Perceiver-style module cross-attends \(r\) learned latent queries \(Q_m\) to that layer’s activations:</p>
+\[ U_l \;=\; \mathrm{XAttn}\big(Q_m,\; K(Z_{l-1}),\; V(Z_{l-1})\big)\in\mathbb{R}^{r\times d_u}, \]
+<p>and two heads turn each latent into one row of \(A_l\) and one column of \(B_l\). The adapted weight is \(W'_l = W_l + \alpha_l B_l A_l\), with a learned per-layer scale \(\alpha_l\). Because the latents have fixed size, inputs of any length map to the same adapter shape.</p>
+<p><strong>Long documents</strong> are split into \(K\) chunks, each turned into its own adapter, and the adapters are concatenated along the rank dimension:</p>
+\[ A_l = \begin{bmatrix} A^{(1)}_l\\ \vdots\\ A^{(K)}_l\end{bmatrix},\qquad B_l = \big[\,B^{(1)}_l \;\cdots\; B^{(K)}_l\,\big], \]
+<p class="eq-note">This gives total rank \(r\cdot K\) without changing the hypernetwork’s output shape.</p>
+
+<div class="recipe">
+  <div class="recipe-head"><h3>Doc-to-LoRA</h3><span>Recipe 6.1 · Charakorn et al. 2026</span></div>
+  <div class="recipe-body">
+    <div>
+      <h4>You will need</h4>
+      <ul>
+        <li>A frozen target LLM (gemma-2-2b-it in the main experiments)</li>
+        <li>A corpus of contexts, plus generated questions and teacher answers for each</li>
+        <li>A Perceiver hypernetwork: 8 cross-attention blocks, 309M parameters, rank-8 output per chunk</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Method</h4>
+      <ol>
+        <li>Meta-train \(H_\phi\) so the adapted model without context matches the model with context (the KL objective above).</li>
+        <li>At use time, run the new document once through the LLM to get its activations.</li>
+        <li>Split into chunks (8K tokens each in the QA experiments) and generate a rank-8 adapter per chunk for each MLP down-projection.</li>
+        <li>Concatenate the chunks’ adapters and attach them to the frozen model.</li>
+        <li>Answer questions about the document with the document no longer in context.</li>
+      </ol>
+    </div>
+  </div>
+  <div class="recipe-foot"><b>Modes</b>Batched generation (all layers at once) is fastest. Iterative generation (one layer at a time) uses the least memory. The two are mathematically equivalent.</div>
+</div>
+
+<h3>A needle in a haystack, stored in weights</h3>
+<p>In the synthetic test, a sentence like “The special magic number is 0042.” is hidden in a long distractor document. D2L was trained only on contexts of 32–256 tokens. At test time the base model gets only the question.</p>
+<fig k="d2l-2"></fig>
+<p>Up to the base model’s 8K window, D2L matches reading the document in context. Beyond it, the base model collapses while D2L stays near perfect up to 40 chunks (40K tokens), “quintuple the number of chunks the model has been exposed to during its training phase”. Memory tells the same story: “The base model uses more than 12 GB of additional memory to generate a response to a 128K-token haystack. In contrast, the model with internalized knowledge consistently uses significantly lower memory (< 50 MB)” <cite k="d2l"></cite>.</p>
+
+<h3>Real questions</h3>
+<fig k="d2l-3"></fig>
+<p>On SQuAD, D2L reaches 82.5% of the in-context upper bound, and it does so in under a second. Context distillation needs about 40 seconds with the oracle query, and more than 100 seconds once query generation is included <cite k="d2l"></cite>.</p>
+
+<div class="tbl"><div class="tbl-scroll"><table>
+<thead><tr><th>Method</th><th>Normalized performance ↑</th><th>Additional update memory (GB) ↓</th><th>Mean update latency (s) ↓</th></tr></thead>
+<tbody>
+<tr><th>CD (oracle query)</th><td>0.901</td><td>7.820</td><td>40.171 ± 0.351</td></tr>
+<tr><th>D2L (batched)</th><td class="best">0.857</td><td>11.522</td><td class="best">0.209 ± 0.123</td></tr>
+<tr><th>D2L (iterative)</th><td>0.844</td><td class="best">3.791</td><td>0.551 ± 0.101</td></tr>
+<tr><th>CD (25 generated queries)</th><td>0.745</td><td>59.925</td><td>465.454 ± 67.868</td></tr>
+<tr><th>CD (5 generated queries)</th><td>0.704</td><td>79.371</td><td>72.537 ± 7.821</td></tr>
+</tbody></table></div>
+<p class="tbl-cap"><b>Table 6.3</b> In-parameter knowledge methods on 2WikiMultihopQA. Table 1 of Charakorn et al. 2026. Test documents go up to 32K tokens, while D2L’s longest training sample was 2,344 tokens.</p></div>
+
+<p>The paper also shows D2L moving <em>visual</em> information. With a vision-language model as the context encoder, a text-only LLM classified Imagenette images at 75.03% purely from internalized adapters <cite k="d2l"></cite>.</p>
+
+<div class="caveat"><b>Chef’s notes</b>D2L stays below the oracle CD that optimizes directly on the test query (0.857 versus 0.901 on 2Wiki). T2L, trained on task data rather than documents, “cannot effectively internalize knowledge due to its highly focused training data” <cite k="d2l"></cite>. For continual learning the open questions move elsewhere: how to choose, combine or merge a growing pile of adapters over time.</div>
+
+<div class="takeaways"><h4>What to take from this chapter</h4><ol>
+<li>A hypernetwork turns adaptation into inference: one forward pass from a description (T2L) or a document (D2L) to a LoRA.</li>
+<li>Training end-to-end through the base model (SFT, or distillation for D2L) generalizes. Imitating a library of separately trained adapters does not.</li>
+<li>The base weights never move, so nothing old is overwritten. Knowledge accumulates as adapters.</li>
+</ol></div>
